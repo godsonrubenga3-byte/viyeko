@@ -1,0 +1,47 @@
+{
+  "entities": {
+    "Vehicle": {
+      "title": "Vehicle",
+      "description": "A vehicle in the user's digital garage.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "uid": { "type": "string" },
+        "make": { "type": "string" },
+        "model": { "type": "string" },
+        "year": { "type": "integer" },
+        "initialMileage": { "type": "integer" },
+        "currentMileage": { "type": "integer" },
+        "createdAt": { "type": "integer" }
+      },
+      "required": ["id", "uid", "make", "model", "year", "initialMileage", "currentMileage", "createdAt"]
+    },
+    "ServiceEntry": {
+      "title": "Service Entry",
+      "description": "A maintenance or repair record for a vehicle.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "vehicleId": { "type": "string" },
+        "uid": { "type": "string" },
+        "type": { "type": "string", "enum": ["oil_change", "tire_rotation", "brake_check", "other"] },
+        "date": { "type": "string", "format": "date" },
+        "mileage": { "type": "integer" },
+        "cost": { "type": "number" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "integer" }
+      },
+      "required": ["id", "vehicleId", "uid", "type", "date", "mileage", "cost", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/vehicles/{vehicleId}": {
+      "schema": "Vehicle",
+      "description": "User vehicles."
+    },
+    "/serviceEntries/{entryId}": {
+      "schema": "ServiceEntry",
+      "description": "Maintenance records."
+    }
+  }
+}

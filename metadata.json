@@ -1,0 +1,5 @@
+{
+  "name": "Viyeko",
+  "description": "A sleek, precision vehicle maintenance and repair tracker for the modern digital garage.",
+  "requestFramePermissions": ["geolocation"]
+}
