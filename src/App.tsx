@@ -24,14 +24,14 @@ import AdminPanel from './components/AdminPanel';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
 export default function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(true); // Temporarily disabled
   const [isProviderMode, setIsProviderMode] = useState(false);
   const [user, setUser] = useState<UserType>({
-    id: '',
-    name: 'Member',
-    phone: '',
-    email: '',
-    avatar: 'https://picsum.photos/seed/user/200/200'
+    id: 'dev-user-123',
+    name: 'Developer Mode',
+    phone: '+91 98765 43210',
+    email: 'dev@viyeko.com',
+    avatar: 'https://picsum.photos/seed/dev/200/200'
   });
 
   const { requests, addRequest, advanceStatus, cancelRequest } = useRequests();
