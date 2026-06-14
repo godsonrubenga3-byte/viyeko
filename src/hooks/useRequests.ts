@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Request } from '../types';
 import { supabase } from '../lib/supabase';
 import { toast } from 'sonner';
@@ -6,28 +6,23 @@ import { toast } from 'sonner';
 export function useRequests() {
   const [requests, setRequests] = useState<Request[]>([]);
   const [loading, setLoading] = useState(true);
+  const channelRef = useRef<any>(null);
 
-  // Fetch initial requests and subscribe to changes
-  useEffect(() => {
-    fetchRequests();
-
-    const subscription = supabase
-      .channel('assistance_requests_changes')
-      .on('postgres_changes', { 
-        event: '*', 
-        schema: 'public', 
-        table: 'assistance_requests' 
-      }, (payload) => {
-        handleRealtimeUpdate(payload);
-      })
-      .subscribe();
-
-    return () => {
-      subscription.unsubscribe();
-    };
+  // Helper to check if credentials are valid (not placeholders)
+  const hasValidCreds = useCallback(() => {
+    const url = import.meta.env.VITE_SUPABASE_URL;
+    const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+    return url && key && !url.includes('YOUR_SUPABASE_URL') && !key.includes('YOUR_PUBLISHABLE_KEY');
   }, []);
 
-  async function fetchRequests() {
+  const fetchRequests = useCallback(async () => {
+    if (!hasValidCreds()) {
+      const saved = localStorage.getItem('viyeko_requests');
+      if (saved) setRequests(JSON.parse(saved));
+      setLoading(false);
+      return;
+    }
+
     try {
       const { data, error } = await supabase
         .from('assistance_requests')
@@ -38,42 +33,79 @@ export function useRequests() {
       setRequests(data || []);
     } catch (err) {
       console.error('Error fetching requests:', err);
-      // Fallback to local storage if DB is unreachable
       const saved = localStorage.getItem('viyeko_requests');
       if (saved) setRequests(JSON.parse(saved));
     } finally {
       setLoading(false);
     }
-  }
+  }, [hasValidCreds]);
 
-  const handleRealtimeUpdate = (payload: any) => {
-    if (payload.eventType === 'INSERT') {
-      setRequests(prev => [payload.new, ...prev]);
-    } else if (payload.eventType === 'UPDATE') {
-      setRequests(prev => prev.map(req => req.id === payload.new.id ? payload.new : req));
-      
-      // Notify user of status changes
-      const oldReq = requests.find(r => r.id === payload.new.id);
-      if (oldReq && oldReq.status !== payload.new.status) {
-        toast.info(`Request status updated: ${payload.new.status}`);
+  // Initial fetch
+  useEffect(() => {
+    fetchRequests();
+  }, [fetchRequests]);
+
+  // Real-time subscription hardening
+  useEffect(() => {
+    if (!hasValidCreds()) return;
+
+    // Create a unique channel ID to avoid collisions during HMR/Strict Mode
+    const channelId = `reqs_${Math.random().toString(36).substring(7)}`;
+    
+    const channel = supabase
+      .channel(channelId)
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'assistance_requests' 
+      }, (payload) => {
+        if (payload.eventType === 'INSERT') {
+          setRequests(prev => {
+            if (prev.some(r => r.id === payload.new.id)) return prev;
+            return [payload.new as Request, ...prev];
+          });
+        } else if (payload.eventType === 'UPDATE') {
+          setRequests(prev => prev.map(req => req.id === payload.new.id ? (payload.new as Request) : req));
+          toast.info(`Request updated: ${payload.new.status}`);
+        }
+      });
+
+    // Store in ref and subscribe
+    channelRef.current = channel;
+    channel.subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        console.log('Successfully subscribed to assistance_requests');
       }
-    }
-  };
+    });
+
+    return () => {
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
+    };
+  }, [hasValidCreds]);
 
   const addRequest = async (newRequest: Request) => {
+    if (!hasValidCreds()) {
+      const updated = [newRequest, ...requests];
+      setRequests(updated);
+      localStorage.setItem('viyeko_requests', JSON.stringify(updated));
+      toast.success('Mock Mode: Request saved locally');
+      return;
+    }
+
     try {
       const { error } = await supabase
         .from('assistance_requests')
         .insert([newRequest]);
 
       if (error) throw error;
-      // Real-time listener will update the state
     } catch (err) {
       console.error('Error adding request:', err);
-      // Fallback for offline mode
       setRequests(prev => [newRequest, ...prev]);
       localStorage.setItem('viyeko_requests', JSON.stringify([newRequest, ...requests]));
-      toast.warning('Offline: Request saved locally and will sync when online.');
+      toast.warning('Offline: Request saved locally.');
     }
   };
 
@@ -84,6 +116,17 @@ export function useRequests() {
     const statusOrder: Request['status'][] = ['searching', 'assigned', 'on-the-way', 'arrived', 'in-progress', 'completed'];
     const currentIndex = statusOrder.indexOf(req.status);
     const nextStatus = statusOrder[currentIndex + 1] || 'completed';
+
+    if (!hasValidCreds()) {
+      const updated = requests.map(r => r.id === requestId ? { 
+        ...r, 
+        status: nextStatus,
+        estimatedArrival: nextStatus === 'completed' ? 0 : Math.max(0, (r.estimatedArrival || 0) - 3)
+      } : r);
+      setRequests(updated);
+      localStorage.setItem('viyeko_requests', JSON.stringify(updated));
+      return;
+    }
 
     try {
       const { error } = await supabase
@@ -101,6 +144,13 @@ export function useRequests() {
   };
 
   const cancelRequest = async (requestId: string) => {
+    if (!hasValidCreds()) {
+      const updated = requests.map(r => r.id === requestId ? { ...r, status: 'completed' as const } : r);
+      setRequests(updated);
+      localStorage.setItem('viyeko_requests', JSON.stringify(updated));
+      return;
+    }
+
     try {
       const { error } = await supabase
         .from('assistance_requests')

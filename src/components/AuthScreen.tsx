@@ -25,6 +25,15 @@ export default function AuthScreen({ onBack }: AuthScreenProps) {
   const handleGoogleSignIn = async () => {
     setLoading(true);
     setError(null);
+    
+    // Developer Bypass: Login with mock data instead of real Google OAuth
+    toast.info('Bypassing Google Auth (Dev Mode)...');
+    setTimeout(() => {
+      if (onBack) onBack(); 
+      setLoading(false);
+    }, 800);
+
+    /* Real logic commented out for dev mode
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -39,6 +48,7 @@ export default function AuthScreen({ onBack }: AuthScreenProps) {
     } finally {
       setLoading(false);
     }
+    */
   };
 
   const handleSubmit = async (e: React.FormEvent) => {

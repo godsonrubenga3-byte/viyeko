@@ -20,6 +20,18 @@ export function useProvider(userId: string | undefined) {
   }, [userId]);
 
   async function fetchProfile() {
+    if (!import.meta.env.VITE_SUPABASE_URL || userId === 'dev-user-123') {
+      setProfile({
+        id: 'dev-user-123',
+        is_online: false,
+        full_name: 'Developer Mode',
+        rating: 5.0,
+        total_jobs: 10
+      });
+      setLoading(false);
+      return;
+    }
+
     try {
       const { data, error } = await supabase
         .from('profiles')
