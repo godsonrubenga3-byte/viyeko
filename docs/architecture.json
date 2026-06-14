@@ -1,0 +1,42 @@
+{
+  "name": "VIYEKO Architecture",
+  "description": "High-level architectural overview of the VIYEKO roadside assistance platform.",
+  "stateManagement": {
+    "type": "React Hooks & LocalStorage",
+    "keyObjects": {
+      "activeTab": "Controls primary navigation (Home, History, Profile)",
+      "requests": "Array of Request objects, persisted to localStorage",
+      "selectedService": "The service currently being configured in the modal",
+      "user": "Hardcoded/Mocked user profile data (Firebase Auth bypassed)",
+      "vehicles": "User vehicle list state"
+    }
+  },
+  "dataPersistence": {
+    "storage": "Browser LocalStorage (Auth data currently bypassed)",
+    "keys": {
+      "requests": "viyeko_requests",
+      "theme": "viyeko_theme"
+    }
+  },
+  "uiPatterns": [
+    "Glassmorphism (semi-transparent backgrounds and blurs)",
+    "Mobile-first responsive layout with desktop sidebar",
+    "Interactive status timelines with Framer Motion",
+    "Simulated real-time updates"
+  ],
+  "missingFeatures": [
+    "Real-time Backend (No actual server for request dispatching)",
+    "Authentication (No user login/registration system)",
+    "Real Map Integration (Currently uses a simulated/mock map component)",
+    "Payment Gateway (Cost calculation exists but no checkout process)",
+    "Push Notifications (Necessary for background status updates)",
+    "Service Provider App (Currently just a toggle mode in the client app)"
+  ],
+  "recommendations": [
+    "Integrate Firebase or Supabase for real-time synchronization and Auth.",
+    "Implement Google Maps or Mapbox for actual location tracking and ETAs.",
+    "Add Razorpay or Stripe for payment processing in India.",
+    "Transition to a dedicated Provider App using a shared component library.",
+    "Implement PWA (Progressive Web App) features for offline functionality and home screen installation."
+  ]
+}

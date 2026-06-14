@@ -3,10 +3,11 @@ import { LucideIcon, Car, Wrench, Fuel, Droplet, Truck, Utensils, ShieldAlert } 
 export type ServiceType = 'emergency' | 'extended';
 
 export interface User {
+  id: string;
   name: string;
   phone: string;
   email: string;
-  avatar?: string;
+  avatar: string;
 }
 
 export interface Vehicle {

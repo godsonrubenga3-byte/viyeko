@@ -1,13 +1,73 @@
 @import "tailwindcss";
 
+:root {
+  --charcoal: #FFFFFF;
+  --charcoal-light: #F8FAFC;
+  --charcoal-darker: #F1F5F9;
+  
+  --slate-50: #0F172A;
+  --slate-100: #1E293B;
+  --slate-200: #334155;
+  --slate-300: #475569;
+  --slate-400: #64748B;
+  --slate-500: #94A3B8;
+  --slate-600: #CBD5E1;
+  --slate-700: #E2E8F0;
+  --slate-800: #F1F5F9;
+  --slate-900: #F8FAFC;
+  
+  --glass-bg: rgba(255, 255, 255, 0.8);
+  --glass-border: rgba(0, 0, 0, 0.08);
+  --subtle-bg: rgba(0, 0, 0, 0.05);
+  --subtle-border: rgba(0, 0, 0, 0.1);
+  
+  --edge-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+}
+
+.dark {
+  --charcoal: #0F172A;
+  --charcoal-light: #1E293B;
+  --charcoal-darker: #0B1120;
+  
+  --slate-50: #F8FAFC;
+  --slate-100: #F1F5F9;
+  --slate-200: #E2E8F0;
+  --slate-300: #CBD5E1;
+  --slate-400: #94A3B8;
+  --slate-500: #64748B;
+  --slate-600: #475569;
+  --slate-700: #334155;
+  --slate-800: #1E293B;
+  --slate-900: #0F172A;
+  
+  --glass-bg: rgba(15, 23, 42, 0.4);
+  --glass-border: rgba(255, 255, 255, 0.05);
+  --subtle-bg: rgba(255, 255, 255, 0.05);
+  --subtle-border: rgba(255, 255, 255, 0.1);
+  
+  --edge-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05), 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+}
+
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
   
   --color-slate-yellow: #E6D05D;
-  --color-charcoal: #0F172A;
-  --color-charcoal-light: #1E293B;
-  --color-charcoal-darker: #0B1120;
+  --color-charcoal: var(--charcoal);
+  --color-charcoal-light: var(--charcoal-light);
+  --color-charcoal-darker: var(--charcoal-darker);
+  
+  --color-slate-50: var(--slate-50);
+  --color-slate-100: var(--slate-100);
+  --color-slate-200: var(--slate-200);
+  --color-slate-300: var(--slate-300);
+  --color-slate-400: var(--slate-400);
+  --color-slate-500: var(--slate-500);
+  --color-slate-600: var(--slate-600);
+  --color-slate-700: var(--slate-700);
+  --color-slate-800: var(--slate-800);
+  --color-slate-900: var(--slate-900);
+
   --color-green-glow: #4ADE80;
   --color-viyeko-red: #EF4444;
   --color-viyeko-red-dark: #DC2626;
@@ -18,6 +78,13 @@
 @layer base {
   body {
     @apply bg-charcoal-darker text-slate-100 font-sans antialiased transition-colors duration-300;
+    overscroll-behavior-y: none;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+  }
+  
+  input, textarea {
+    user-select: text;
   }
 }
 
@@ -29,10 +96,19 @@
   }
 }
 
+@utility bg-subtle {
+  background-color: var(--subtle-bg);
+}
+
+@utility border-subtle {
+  border-color: var(--subtle-border);
+}
+
 @layer components {
 
-.map-grid {
-    background-image: radial-gradient(circle at 2px 2px, rgba(230, 208, 93, 0.05) 1px, transparent 0);
+  .map-grid {
+    background-image: radial-gradient(circle at 2px 2px, var(--color-slate-yellow) 0.05, transparent 0);
+    opacity: 0.1;
     background-size: 24px 24px;
   }
 
@@ -41,22 +117,37 @@
   }
 
   .timeline-line {
-    @apply absolute left-[11px] top-4 bottom-0 w-0.5 bg-white/5;
+    @apply absolute left-[11px] top-4 bottom-0 w-0.5 border-subtle border-l;
   }
 
   .timeline-dot {
-    @apply absolute left-0 w-6 h-6 rounded-full bg-charcoal border-2 border-slate-700 flex items-center justify-center z-10;
+    @apply absolute left-0 w-6 h-6 rounded-full bg-charcoal border-2 border-subtle flex items-center justify-center z-10;
   }
 
   .timeline-dot-active {
     @apply border-slate-yellow bg-slate-yellow text-charcoal shadow-[0_0_12px_rgba(230,208,93,0.4)];
   }
 
-  .scrollbar-hide::-webkit-scrollbar {
-    display: none;
+  /* VIYEKO Custom Components */
+  .btn-viyeko-primary {
+    @apply h-14 px-8 rounded-full bg-slate-yellow text-slate-900 font-black uppercase tracking-widest flex items-center justify-center gap-3 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-slate-yellow/20 hover:shadow-slate-yellow/30;
   }
-  .scrollbar-hide {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
+
+  .btn-viyeko-secondary {
+    @apply h-14 px-8 rounded-full bg-subtle border border-subtle text-slate-100 font-bold uppercase tracking-widest flex items-center justify-center gap-3 transition-all duration-300 hover:opacity-80 active:scale-[0.98];
+  }
+
+  .input-viyeko {
+    @apply h-14 px-6 rounded-full bg-subtle border border-subtle text-slate-100 font-medium transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-slate-yellow/20 focus:border-slate-yellow/50 placeholder:text-slate-500;
+  }
+
+  .glass-card {
+    background-color: var(--glass-bg);
+    @apply backdrop-blur-xl border border-subtle rounded-[2.5rem];
+    box-shadow: var(--edge-shadow);
+  }
+
+  .edge-lighting {
+    box-shadow: var(--edge-shadow);
   }
 }

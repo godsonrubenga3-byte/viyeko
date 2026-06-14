@@ -2,12 +2,26 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>My Google AI Studio App</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>VIYEKO - Roadside Assistance</title>
+    <meta name="theme-color" content="#121212" />
+    <meta name="description" content="Emergency Roadside Assistance in Punjab & Chandigarh" />
+    <link rel="apple-touch-icon" href="/pwa-192x192.png" />
+    
+    <!-- Theme Flash Protection -->
+    <script>
+      (function() {
+        const theme = localStorage.getItem('viyeko_theme');
+        if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
+      })();
+    </script>
   </head>
-  <body>
+  <body class="bg-charcoal text-white transition-colors duration-300">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-

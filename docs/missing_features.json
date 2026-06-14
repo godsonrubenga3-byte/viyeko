@@ -1,0 +1,146 @@
+{
+  "category": "Missing Features & Critical Gaps",
+  "implementationStatus": "The project has scaffolding for Firebase/Firestore but relies on mocks for core logic.",
+  "missingFunctionality": [
+    {
+      "feature": "Firebase Backend Integration",
+      "status": "Disconnected",
+      "description": "src/firebase.ts exists but is not used in App.tsx. The app uses localStorage for requests and hardcoded state for user/vehicles.",
+      "remedy": "Replace localStorage logic in App.tsx with Firestore queries and use useAuthState for real user profiles."
+    },
+    {
+      "feature": "Real-time Dispatch System",
+      "status": "Mocked",
+      "description": "The current 'Searching' and 'Assigned' status changes are triggered by a manual button click in Provider Mode or a timer.",
+      "remedy": "Implement Firestore listeners (onSnapshot) to update request status in real-time across different devices."
+    },
+    {
+      "feature": "User Authentication",
+      "status": "Temporarily Bypassed/Mocked",
+      "description": "Firebase Auth logic in src/firebase.ts has been replaced with mock promises to facilitate local UI testing without external dependency.",
+      "remedy": "Restore real Firebase Auth logic in src/firebase.ts by uncommenting imports/exports."
+    },
+    {
+      "feature": "Vehicle CRUD",
+      "status": "Partial",
+      "description": "Firestore rules suggest a detailed vehicle model (mileage, year), but the UI only captures basic make/model/plate.",
+      "remedy": "Update the 'Add New Vehicle' form to match the Firestore schema and persist data to the 'vehicles' collection."
+    },
+    {
+      "feature": "Real Map & Geolocation",
+      "status": "Placeholder",
+      "description": "MockMap is a CSS animation. navigator.geolocation is called but results are only shown as text strings.",
+      "remedy": "Integrate a library like 'react-google-maps/api' or 'react-leaflet' to show actual provider movement on a real map."
+    },
+    {
+      "feature": "Payment Integration",
+      "status": "Missing",
+      "description": "Price calculations exist (₹) but there is no payment flow.",
+      "remedy": "Integrate Razorpay or Stripe to handle transactions before confirming a request."
+    }
+  ],
+  "missingComponents": [
+    {
+      "name": "AuthScreen.tsx",
+      "requirements": {
+        "logic": [
+          "Google Sign-In integration via src/firebase.ts",
+          "Email/Password authentication form",
+          "Persistent session management with Firebase AuthStateListener",
+          "Password reset and account creation flows"
+        ],
+        "ui": [
+          "Glassmorphism styling (bg-charcoal/50, backdrop-blur)",
+          "Animated transitions for switching between Login and Signup",
+          "Responsive form layout with loading indicators (Loader2)"
+        ]
+      }
+    },
+    {
+      "name": "MapContainer.tsx",
+      "requirements": {
+        "logic": [
+          "Integration with a real map provider (Google Maps or Leaflet)",
+          "Real-time marker updates for provider and user location",
+          "Distance and ETA calculation using Direction API",
+          "Bounds fitting to show both user and provider simultaneously"
+        ],
+        "ui": [
+          "Clean, minimal map style (Dark mode compatible)",
+          "Custom SVG markers for different vehicle types",
+          "Smooth panning and zooming on status updates"
+        ]
+      }
+    },
+    {
+      "name": "PaymentGate.tsx",
+      "requirements": {
+        "logic": [
+          "Integration with Razorpay, Stripe, or a sandbox for Indian market (UPI, Card, NetBanking)",
+          "Cost breakdown including base price, add-ons, and taxes",
+          "Secure transaction state management (Pending, Success, Failed)",
+          "Payment confirmation callback to trigger service dispatch"
+        ],
+        "ui": [
+          "Multi-step checkout modal",
+          "Clear selection for payment methods with logos",
+          "Success/Failure animations with CheckCircle2/AlertCircle"
+        ]
+      }
+    },
+    {
+      "name": "ProviderDashboard.tsx",
+      "requirements": {
+        "logic": [
+          "Real-time queue of incoming service requests from Firestore",
+          "Earnings analytics (Daily, Weekly, Monthly filters)",
+          "Profile management (Service specialty, vehicle type, documents)",
+          "Availability toggle (Online/Offline status)"
+        ],
+        "ui": [
+          "Information-dense cards for job management",
+          "Quick action buttons for status updates (Accept, Arrived, Complete)",
+          "Earnings charts (using lightweight SVG or a library)"
+        ]
+      }
+    },
+    {
+      "name": "NotificationSystem.tsx",
+      "requirements": {
+        "logic": [
+          "Centralized handler for push and in-app notifications",
+          "Status update alerts (Provider assigned, 5 mins away, arrived)",
+          "Notification history log for auditing",
+          "Sound and vibration alerts for high-priority requests"
+        ],
+        "ui": [
+          "Floating toast notifications (using sonner)",
+          "Consistent iconography matching the service type",
+          "Actionable notifications (e.g., 'View Details')"
+        ]
+      }
+    },
+    {
+      "name": "AdminPanel.tsx",
+      "requirements": {
+        "logic": [
+          "User and Provider management (Approve/Deactivate)",
+          "Service configuration (Price editing, icon management)",
+          "Global system status and incident report logs",
+          "Revenue monitoring and commission management"
+        ],
+        "ui": [
+          "Sidebar-driven dashboard layout",
+          "Data tables with sorting and filtering",
+          "System health metrics (Active users, Pending jobs)"
+        ]
+      }
+    }
+  ],
+  "structuralRecommendations": [
+    "Modularize App.tsx: The file is currently over 1000 lines. Split it into smaller components in src/components/.",
+    "Centralize State: Use a Context API or a store (Zustand/Redux) to manage shared data instead of passing props through 5 layers.",
+    "Add Environment Variables: Use .env for Firebase configuration instead of importing a JSON file directly for better security.",
+    "Implement Error Tracking: Integrate Sentry or a similar service to monitor runtime errors beyond the local ErrorBoundary."
+  ]
+}

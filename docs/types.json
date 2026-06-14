@@ -1,0 +1,49 @@
+{
+  "models": {
+    "Service": {
+      "fields": {
+        "id": "string",
+        "title": "string",
+        "subtitle": "string",
+        "description": "string",
+        "icon": "LucideIcon",
+        "type": "emergency | extended",
+        "color": "string (Tailwind class)",
+        "price": "number",
+        "eta": "string (optional)",
+        "isAddOn": "boolean (optional)"
+      }
+    },
+    "Request": {
+      "fields": {
+        "id": "string",
+        "status": "searching | assigned | on-the-way | arrived | in-progress | completed",
+        "location": "object (lat, lng, address)",
+        "vehicleInfo": "string",
+        "totalCost": "number",
+        "timestamp": "number (ms)"
+      }
+    },
+    "Vehicle": {
+      "fields": {
+        "make": "string",
+        "model": "string",
+        "plate": "string",
+        "color": "string"
+      }
+    }
+  },
+  "missingTypes": [
+    "Provider Profile (Details about the mechanic/driver)",
+    "Transaction Record (For payment history)",
+    "API Response Envelopes",
+    "Error Schema for validation",
+    "Review/Rating model"
+  ],
+  "recommendations": [
+    "Use Zod for runtime schema validation, especially for location data.",
+    "Expand Request status to include 'cancelled' and 'timed_out'.",
+    "Add more granular vehicle types (e.g., fuel type, transmission) to help providers prepare better.",
+    "Implement TypeScript 'const' assertions for the SERVICES array for stricter typing."
+  ]
+}
