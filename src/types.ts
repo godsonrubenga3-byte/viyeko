@@ -26,16 +26,26 @@ export interface Service {
   icon: LucideIcon;
   type: ServiceType;
   color: string;
-  price: number;
+  price: number; // This acts as a "Suggested/Min" price now
   eta?: string;
   isAddOn?: boolean;
+}
+
+export interface Bid {
+  id: string;
+  providerId: string;
+  providerName: string;
+  price: number;
+  eta: number; // minutes
+  timestamp: number;
+  rating: number;
 }
 
 export interface Request {
   id: string;
   serviceId: string;
   addOnIds?: string[];
-  status: 'searching' | 'assigned' | 'on-the-way' | 'arrived' | 'in-progress' | 'completed';
+  status: 'searching' | 'bidding' | 'assigned' | 'on-the-way' | 'arrived' | 'in-progress' | 'completed';
   location: {
     lat?: number;
     lng?: number;
@@ -44,8 +54,12 @@ export interface Request {
   timestamp: number;
   vehicleInfo: string;
   notes?: string;
-  estimatedArrival?: number; // in minutes
-  totalCost: number;
+  estimatedArrival?: number;
+  totalCost?: number;
+  userId?: string;
+  providerId?: string;
+  bids?: Bid[]; // Live collection of quotes from garages
+  acceptedBidId?: string;
 }
 
 export const SERVICES: Service[] = [
@@ -57,8 +71,8 @@ export const SERVICES: Service[] = [
     icon: Car,
     type: 'emergency',
     color: 'bg-rose-500',
-    price: 499,
-    eta: '12-18 min'
+    price: 35000,
+    eta: 'Calculating bids...'
   },
   {
     id: 'tire',
@@ -68,8 +82,8 @@ export const SERVICES: Service[] = [
     icon: Wrench,
     type: 'emergency',
     color: 'bg-slate-yellow',
-    price: 399,
-    eta: '8-14 min'
+    price: 20000,
+    eta: 'Calculating bids...'
   },
   {
     id: 'fuel',
@@ -79,51 +93,18 @@ export const SERVICES: Service[] = [
     icon: Fuel,
     type: 'emergency',
     color: 'bg-emerald-600',
-    price: 299,
-    eta: '15-22 min'
+    price: 15000,
+    eta: 'Calculating bids...'
   },
   {
     id: 'wash',
     title: 'Car Wash',
-    subtitle: 'Car / Bike',
+    subtitle: 'Mobile Wash',
     description: 'Professional cleaning at your location.',
     icon: Droplet,
     type: 'emergency',
     color: 'bg-sky-600',
-    price: 599,
-    eta: '20-30 min'
-  },
-  {
-    id: 'servicing',
-    title: 'Servicing',
-    subtitle: 'Maintenance',
-    description: 'Routine maintenance and oil change.',
-    icon: Truck,
-    type: 'extended',
-    color: 'bg-slate-yellow',
-    price: 799,
-    isAddOn: true
-  },
-  {
-    id: 'recovery',
-    title: 'Accident Recovery',
-    subtitle: 'Towing',
-    description: 'Safe towing and revival for damaged vehicles.',
-    icon: ShieldAlert,
-    type: 'extended',
-    color: 'bg-slate-600',
-    price: 1299,
-    isAddOn: true
-  },
-  {
-    id: 'fuel-addon',
-    title: 'Fuel',
-    subtitle: 'Top-up',
-    description: 'Extra fuel for your journey.',
-    icon: Fuel,
-    type: 'extended',
-    color: 'bg-emerald-600',
-    price: 299,
-    isAddOn: true
+    price: 10000,
+    eta: 'Calculating bids...'
   }
 ];

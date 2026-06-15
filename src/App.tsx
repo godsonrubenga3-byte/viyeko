@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, useNavigate } from 'react-router-dom';
 import { Toaster, toast } from 'sonner';
 
 // Context & Hooks
@@ -22,9 +22,7 @@ import { User as UserType } from './types';
 
 export default function App() {
   const { user: authUser, loading: authLoading, signOut, role } = useAuth();
-  const { requests, addRequest, advanceStatus, cancelRequest } = useRequests();
-  
-  // Persistent Developer Role for testing
+  const { requests, addRequest, submitBid, acceptBid, advanceStatus, cancelRequest } = useRequests();
   const [devRole, setDevRole] = useState<'driver' | 'provider' | 'admin' | null>(() => {
     return (localStorage.getItem('viyeko_dev_role') as any) || null;
   });
@@ -70,7 +68,7 @@ export default function App() {
   const user: UserType = {
     id: authUser?.id || '00000000-0000-0000-0000-000000000000',
     name: authUser?.user_metadata.full_name || 'Developer Mode',
-    phone: authUser?.user_metadata.phone || '+91 98765 43210',
+    phone: authUser?.user_metadata.phone || '+255 700 000 000',
     email: authUser?.email || 'dev@viyeko.com',
     avatar: authUser?.user_metadata.avatar_url || `https://picsum.photos/seed/dev/200/200`
   };
@@ -87,6 +85,7 @@ export default function App() {
                   requests={requests}
                   onAccept={advanceStatus}
                   onComplete={advanceStatus}
+                  onSendBid={submitBid}
                   userId={user.id}
                 />
               ) : (
@@ -95,12 +94,13 @@ export default function App() {
                   onAddRequest={addRequest}
                   onCancelRequest={cancelRequest}
                   onAdvanceStatus={advanceStatus}
+                  onAcceptBid={acceptBid}
                 />
               )
             } />
             <Route path="/history" element={<HistoryPage requests={requests} />} />
             <Route path="/profile" element={<ProfilePage user={user} onLogout={handleLogout} />} />
-            <Route path="/admin" element={roleToUse === 'admin' ? <AdminPanel /> : <HomePage requests={requests} onAddRequest={addRequest} onCancelRequest={cancelRequest} onAdvanceStatus={advanceStatus} />} />
+            <Route path="/admin" element={roleToUse === 'admin' ? <AdminPanel /> : <HomePage requests={requests} onAddRequest={addRequest} onCancelRequest={cancelRequest} onAdvanceStatus={advanceStatus} onAcceptBid={acceptBid} />} />
           </Route>
         </Routes>
       </ErrorBoundary>

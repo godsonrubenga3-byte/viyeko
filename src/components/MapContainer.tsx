@@ -6,7 +6,7 @@ import { cn } from '../lib/utils';
 interface MapContainerProps {
   userLocation?: { lat: number, lng: number, address: string };
   providerLocation?: { lat: number, lng: number };
-  status: 'searching' | 'assigned' | 'on-the-way' | 'arrived' | 'in-progress' | 'completed';
+  status: 'searching' | 'bidding' | 'assigned' | 'on-the-way' | 'arrived' | 'in-progress' | 'completed';
   className?: string;
 }
 
@@ -16,7 +16,8 @@ export default function MapContainer({ userLocation, providerLocation, status, c
   
   const providerPos = useMemo(() => {
     switch (status) {
-      case 'searching': return null;
+      case 'searching': 
+      case 'bidding': return null;
       case 'assigned': return { x: 20, y: 20 };
       case 'on-the-way': return { x: 35, y: 35 };
       case 'arrived': return { x: 48, y: 48 };

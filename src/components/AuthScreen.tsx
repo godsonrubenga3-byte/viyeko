@@ -13,7 +13,8 @@ import {
   CheckCircle2, 
   Phone, 
   ShieldCheck,
-  Send
+  Send,
+  AlertTriangle
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { toast } from 'sonner';
@@ -38,6 +39,14 @@ export default function AuthScreen({ onBypass }: AuthScreenProps) {
   const [vehicleColor, setVehicleColor] = useState('');
   const [selectedRole, setSelectedRole] = useState<'driver' | 'provider'>('driver');
   const [error, setError] = useState<string | null>(null);
+
+  // Tanzanian Phone Number Validation
+  // Local: 07XXXXXXXX or 06XXXXXXXX (10 digits)
+  // International: +2557XXXXXXXX or +2556XXXXXXXX (13 chars)
+  const validateTZPhone = (num: string) => {
+    const tzRegex = /^(?:\+255|0)[67]\d{8}$/;
+    return tzRegex.test(num.replace(/\s/g, ''));
+  };
 
   const handleGoogleSignIn = async (forcedRole?: string) => {
     setLoading(true);
@@ -95,6 +104,13 @@ export default function AuthScreen({ onBypass }: AuthScreenProps) {
     setLoading(true);
     setError(null);
 
+    // Validate Phone for Registration
+    if (view === 'register' && !validateTZPhone(phone)) {
+      setError('Invalid Tanzanian phone number. Use 07... or +255...');
+      setLoading(false);
+      return;
+    }
+
     try {
       if (view === 'login') {
         const { error } = await supabase.auth.signInWithPassword({
@@ -102,7 +118,7 @@ export default function AuthScreen({ onBypass }: AuthScreenProps) {
           password
         });
         if (error) throw error;
-        toast.success('Welcome back!');
+        toast.success('Karibu tena! Welcome back.');
       } else if (view === 'register') {
         const { error } = await supabase.auth.signUp({
           email,
@@ -173,7 +189,7 @@ export default function AuthScreen({ onBypass }: AuthScreenProps) {
               {view === 'login' ? 'Member Login' : view === 'register' ? 'Join Network' : 'Reset Access'}
             </h2>
             <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em]">
-              {view === 'login' ? 'Secure access to assistance' : view === 'register' ? 'Experience Punjab\'s best service' : 'Enter your registered email'}
+              {view === 'login' ? 'Secure access to assistance' : view === 'register' ? 'Tanzania\'s best rescue network' : 'Enter your registered email'}
             </p>
           </div>
         </div>
@@ -302,16 +318,17 @@ export default function AuthScreen({ onBypass }: AuthScreenProps) {
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.15em] ml-1 flex items-center gap-2">
                     <Phone size={12} className="text-slate-yellow" />
-                    Primary Phone
+                    TZ Phone Number
                   </label>
                   <input 
                     type="tel" 
                     required
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
-                    placeholder="e.g. +91 98765 43210"
+                    placeholder="e.g. 07XXXXXXXX"
                     className="input-viyeko w-full h-14 text-sm tracking-tight"
                   />
+                  <p className="text-[8px] text-slate-500 font-bold uppercase tracking-widest ml-1">Must start with 06, 07 or +255</p>
                 </div>
 
                 {selectedRole === 'driver' && (
@@ -324,7 +341,7 @@ export default function AuthScreen({ onBypass }: AuthScreenProps) {
                           required
                           value={vehicleMake}
                           onChange={(e) => setVehicleMake(e.target.value)}
-                          placeholder="Maruti"
+                          placeholder="Toyota"
                           className="input-viyeko w-full h-14 text-sm tracking-tight"
                         />
                       </div>
@@ -335,7 +352,7 @@ export default function AuthScreen({ onBypass }: AuthScreenProps) {
                           required
                           value={vehicleModel}
                           onChange={(e) => setVehicleModel(e.target.value)}
-                          placeholder="Swift"
+                          placeholder="Land Cruiser"
                           className="input-viyeko w-full h-14 text-sm tracking-tight"
                         />
                       </div>
@@ -349,7 +366,7 @@ export default function AuthScreen({ onBypass }: AuthScreenProps) {
                           required
                           value={vehiclePlate}
                           onChange={(e) => setVehiclePlate(e.target.value)}
-                          placeholder="CH01-XX-0000"
+                          placeholder="T 123 ABC"
                           className="input-viyeko w-full h-14 text-sm tracking-tight uppercase"
                         />
                       </div>
@@ -469,7 +486,7 @@ export default function AuthScreen({ onBypass }: AuthScreenProps) {
               <CheckCircle2 size={16} className="text-emerald-500" />
             </div>
             <p className="text-[9px] text-emerald-500/70 font-bold uppercase tracking-wider leading-relaxed">
-              Your connection is secured with end-to-end encryption for Punjab region operations.
+              Your connection is secured with end-to-end encryption for Tanzania operations.
             </p>
           </div>
         </div>

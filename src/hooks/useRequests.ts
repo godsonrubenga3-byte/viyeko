@@ -1,13 +1,61 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Request } from '../types';
+import { Request, Bid } from '../types';
 import { supabase } from '../lib/supabase';
+import { ably, ABLY_CHANNELS } from '../lib/ably';
 import { toast } from 'sonner';
 
 export function useRequests() {
   const [requests, setRequests] = useState<Request[]>([]);
   const [loading, setLoading] = useState(true);
-  const channelRef = useRef<any>(null);
+  
+  // ABLY INTEGRATION: Private Bid & Status Subscriptions
+  useEffect(() => {
+    if (!ably) return;
 
+    const activeRequests = requests.filter(r => 
+      r.status === 'searching' || 
+      r.status === 'bidding' || 
+      r.status === 'assigned' || 
+      r.status === 'on-the-way'
+    );
+    
+    const activeChannels: { channel: any; event: string; callback: any }[] = [];
+
+    activeRequests.forEach(req => {
+      // 1. Subscribe to Bids
+      const bidChannel = ably.channels.get(ABLY_CHANNELS.requestBids(req.id));
+      const bidCallback = (message: any) => {
+        const bid: Bid = message.data;
+        setRequests(prev => prev.map(r => {
+          if (r.id === req.id) {
+            if (r.bids?.some(b => b.id === bid.id)) return r;
+            return { ...r, bids: [...(r.bids || []), bid], status: 'bidding' };
+          }
+          return r;
+        }));
+        toast.success(`New bid for ${req.id.slice(0,4)}: TZS ${bid.price.toLocaleString()}`);
+      };
+      bidChannel.subscribe('new-bid', bidCallback);
+      activeChannels.push({ channel: bidChannel, event: 'new-bid', callback: bidCallback });
+
+      // 2. Subscribe to Status Updates
+      const statusChannel = ably.channels.get(ABLY_CHANNELS.requestStatus(req.id));
+      const statusCallback = (message: any) => {
+        const { status } = message.data;
+        setRequests(prev => prev.map(r => r.id === req.id ? { ...r, status } : r));
+      };
+      statusChannel.subscribe('status-change', statusCallback);
+      activeChannels.push({ channel: statusChannel, event: 'status-change', callback: statusCallback });
+    });
+
+    return () => {
+      activeChannels.forEach(({ channel, event, callback }) => {
+        channel.unsubscribe(event, callback);
+      });
+    };
+  }, [requests.length]); 
+
+  // HELPER: Check credentials
   const hasValidCreds = useCallback(() => {
     const url = import.meta.env.VITE_SUPABASE_URL;
     const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
@@ -26,22 +74,30 @@ export function useRequests() {
     estimatedArrival: dbReq.estimated_arrival,
     totalCost: dbReq.total_cost,
     userId: dbReq.user_id,
-    providerId: dbReq.provider_id
+    providerId: dbReq.provider_id,
+    bids: dbReq.bids || [],
+    acceptedBidId: dbReq.accepted_bid_id
   });
 
-  const mapToDatabase = (req: Request) => ({
-    id: req.id,
-    service_id: req.serviceId,
-    addon_ids: req.addOnIds,
-    status: req.status,
-    location: req.location,
-    timestamp: req.timestamp,
-    vehicle_info: req.vehicleInfo,
-    notes: req.notes,
-    estimated_arrival: req.estimatedArrival,
-    total_cost: req.totalCost,
-    user_id: req.userId || '00000000-0000-0000-0000-000000000000'
-  });
+  const mapToDatabase = (req: Request) => {
+    const data: any = {
+      id: req.id,
+      service_id: req.serviceId,
+      addon_ids: req.addOnIds || [],
+      status: req.status,
+      location: req.location,
+      timestamp: req.timestamp,
+      vehicle_info: req.vehicleInfo,
+      notes: req.notes,
+      estimated_arrival: req.estimatedArrival || 15,
+      total_cost: req.totalCost || 0,
+      user_id: req.userId || '00000000-0000-0000-0000-000000000000'
+    };
+    if (req.bids && req.bids.length > 0) data.bids = req.bids;
+    if (req.acceptedBidId) data.accepted_bid_id = req.acceptedBidId;
+    if (req.providerId) data.provider_id = req.providerId;
+    return data;
+  };
 
   const fetchRequests = useCallback(async () => {
     if (!hasValidCreds()) {
@@ -59,7 +115,7 @@ export function useRequests() {
 
       if (error) throw error;
       setRequests((data || []).map(mapToFrontend));
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error fetching requests:', err);
       const saved = localStorage.getItem('viyeko_requests');
       if (saved) setRequests(JSON.parse(saved));
@@ -72,58 +128,90 @@ export function useRequests() {
     fetchRequests();
   }, [fetchRequests]);
 
-  useEffect(() => {
-    if (!hasValidCreds()) return;
-
-    const channelId = `reqs_${Math.random().toString(36).substring(7)}`;
-    const channel = supabase
-      .channel(channelId)
-      .on('postgres_changes', { 
-        event: '*', 
-        schema: 'public', 
-        table: 'assistance_requests' 
-      }, (payload) => {
-        if (payload.eventType === 'INSERT') {
-          setRequests(prev => {
-            if (prev.some(r => r.id === payload.new.id)) return prev;
-            return [mapToFrontend(payload.new), ...prev];
-          });
-        } else if (payload.eventType === 'UPDATE') {
-          setRequests(prev => prev.map(req => req.id === payload.new.id ? mapToFrontend(payload.new) : req));
-          toast.info(`Request status updated: ${payload.new.status}`);
-        }
-      });
-
-    channelRef.current = channel;
-    channel.subscribe();
-
-    return () => {
-      if (channelRef.current) {
-        supabase.removeChannel(channelRef.current);
-        channelRef.current = null;
-      }
-    };
-  }, [hasValidCreds]);
-
   const addRequest = async (newRequest: Request) => {
+    const preparedReq = { ...newRequest, status: 'searching' as const };
+    
+    if (ably) {
+      const channel = ably.channels.get(ABLY_CHANNELS.regionBroadcast('Tanzania'));
+      channel.publish('new-breakdown', preparedReq);
+    }
+
     if (!hasValidCreds()) {
-      const updated = [newRequest, ...requests];
+      const updated = [preparedReq, ...requests];
       setRequests(updated);
       localStorage.setItem('viyeko_requests', JSON.stringify(updated));
-      toast.success('Offline mode: Request saved');
       return;
     }
 
     try {
       const { error } = await supabase
         .from('assistance_requests')
-        .insert([mapToDatabase(newRequest)]);
-
+        .insert([mapToDatabase(preparedReq)]);
+      
       if (error) throw error;
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error adding request:', err);
-      setRequests(prev => [newRequest, ...prev]);
-      localStorage.setItem('viyeko_requests', JSON.stringify([newRequest, ...requests]));
+      setRequests(prev => [preparedReq, ...prev]);
+    }
+  };
+
+  const submitBid = async (requestId: string, bid: Bid) => {
+    if (ably) {
+      ably.channels.get(ABLY_CHANNELS.requestBids(requestId)).publish('new-bid', bid);
+    }
+
+    // Persist to DB with fresh state check
+    try {
+      const { data } = await supabase
+        .from('assistance_requests')
+        .select('bids')
+        .eq('id', requestId)
+        .single();
+      
+      const currentBids = data?.bids || [];
+      const updatedBids = [...currentBids, bid];
+
+      await supabase
+        .from('assistance_requests')
+        .update({ bids: updatedBids, status: 'bidding' })
+        .eq('id', requestId);
+    } catch (err) {
+      console.error('Bid submission failed:', err);
+    }
+  };
+
+  const acceptBid = async (requestId: string, bid: Bid) => {
+    if (ably) {
+      const channel = ably.channels.get(ABLY_CHANNELS.requestStatus(requestId));
+      channel.publish('status-change', { status: 'assigned' });
+    }
+
+    if (!hasValidCreds()) {
+      setRequests(prev => prev.map(r => r.id === requestId ? { 
+        ...r, 
+        status: 'assigned',
+        providerId: bid.providerId,
+        acceptedBidId: bid.id,
+        totalCost: bid.price,
+        estimatedArrival: bid.eta
+      } : r));
+      return;
+    }
+
+    try {
+      await supabase
+        .from('assistance_requests')
+        .update({ 
+          status: 'assigned',
+          provider_id: bid.providerId,
+          accepted_bid_id: bid.id,
+          total_cost: bid.price,
+          estimated_arrival: bid.eta
+        })
+        .eq('id', requestId);
+      toast.success(`Rescue confirmed with ${bid.providerName}`);
+    } catch (err) {
+      console.error('Accept error:', err);
     }
   };
 
@@ -131,54 +219,48 @@ export function useRequests() {
     const req = requests.find(r => r.id === requestId);
     if (!req) return;
 
-    const statusOrder: Request['status'][] = ['searching', 'assigned', 'on-the-way', 'arrived', 'in-progress', 'completed'];
+    const statusOrder: Request['status'][] = ['searching', 'bidding', 'assigned', 'on-the-way', 'arrived', 'in-progress', 'completed'];
     const currentIndex = statusOrder.indexOf(req.status);
     const nextStatus = statusOrder[currentIndex + 1] || 'completed';
 
+    if (ably) {
+      const channel = ably.channels.get(ABLY_CHANNELS.requestStatus(requestId));
+      channel.publish('status-change', { status: nextStatus });
+    }
+
     if (!hasValidCreds()) {
-      const updated = requests.map(r => r.id === requestId ? { 
-        ...r, 
-        status: nextStatus,
-        estimatedArrival: nextStatus === 'completed' ? 0 : Math.max(0, (r.estimatedArrival || 0) - 3)
-      } : r);
-      setRequests(updated);
-      localStorage.setItem('viyeko_requests', JSON.stringify(updated));
+      setRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: nextStatus } : r));
       return;
     }
 
     try {
-      const { error } = await supabase
+      await supabase
         .from('assistance_requests')
-        .update({ 
-          status: nextStatus,
-          estimated_arrival: nextStatus === 'completed' ? 0 : Math.max(0, (req.estimatedArrival || 0) - 3)
-        })
+        .update({ status: nextStatus })
         .eq('id', requestId);
-
-      if (error) throw error;
     } catch (err) {
-      console.error('Error updating status:', err);
+      console.error('Status update failed:', err);
     }
   };
 
   const cancelRequest = async (requestId: string) => {
+    if (ably) {
+      ably.channels.get(ABLY_CHANNELS.requestStatus(requestId)).publish('status-change', { status: 'completed' });
+    }
+
     if (!hasValidCreds()) {
-      const updated = requests.map(r => r.id === requestId ? { ...r, status: 'completed' as const } : r);
-      setRequests(updated);
-      localStorage.setItem('viyeko_requests', JSON.stringify(updated));
+      setRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: 'completed' as const } : r));
       return;
     }
 
     try {
-      const { error } = await supabase
+      await supabase
         .from('assistance_requests')
         .update({ status: 'completed' })
         .eq('id', requestId);
-
-      if (error) throw error;
-      toast.error('Request cancelled');
+      toast.error('Rescue Request Cancelled');
     } catch (err) {
-      console.error('Error cancelling request:', err);
+      console.error('Cancellation failed:', err);
     }
   };
 
@@ -186,6 +268,8 @@ export function useRequests() {
     requests,
     loading,
     addRequest,
+    submitBid,
+    acceptBid,
     advanceStatus,
     cancelRequest,
     refresh: fetchRequests

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Navigation, 
@@ -7,40 +7,48 @@ import {
   Phone, 
   ChevronRight, 
   X, 
-  Loader2 
+  Loader2,
+  AlertTriangle,
+  LayoutDashboard
 } from 'lucide-react';
-import { Request, SERVICES, Service, Vehicle } from '../types';
+import { Request, SERVICES, Service, Vehicle, Bid } from '../types';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
+import { supabase } from '../lib/supabase';
+import { useAuth } from '../context/AuthContext';
 import LiveTracking from '../components/LiveTracking';
 import PaymentGate from '../components/PaymentGate';
+import BidSelector from '../components/BidSelector';
 
 interface HomePageProps {
   requests: Request[];
   onAddRequest: (req: Request) => void;
   onCancelRequest: (id: string) => void;
   onAdvanceStatus: (id: string) => void;
+  onAcceptBid: (requestId: string, bid: Bid) => void;
 }
 
 const POPULAR_LOCATIONS = [
-  "Chandigarh Sector 17",
-  "Chandigarh Sector 35",
-  "Mohali Phase 7",
-  "Panchkula Sector 5",
-  "Ludhiana Clock Tower",
-  "Amritsar Golden Temple Area",
-  "Jalandhar Model Town",
-  "Patiala Leela Bhawan",
-  "Zirakpur VIP Road",
-  "Kharar Landran Road"
+  "Dar es Salaam - City Center",
+  "Dar es Salaam - Masaki",
+  "Dar es Salaam - Mbezi Beach",
+  "Dodoma - City Center",
+  "Arusha - Arusha Urban",
+  "Mwanza - City Center",
+  "Geita - Geita Urban",
+  "Zanzibar - Stone Town",
+  "Tanga - City Center",
+  "Mbeya - City Center"
 ];
 
-export default function HomePage({ requests, onAddRequest, onCancelRequest, onAdvanceStatus }: HomePageProps) {
+export default function HomePage({ requests, onAddRequest, onCancelRequest, onAdvanceStatus, onAcceptBid }: HomePageProps) {
+  const { user } = useAuth();
+  
   // UI State
   const [selectedService, setSelectedService] = useState<Service | null>(null);
-  const [showPayment, setShowPayment] = useState(false);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLocating, setIsLocating] = useState(false);
   
   // Data State
   const [location, setLocation] = useState<{ lat?: number; lng?: number; address: string }>({ address: '' });
@@ -48,28 +56,88 @@ export default function HomePage({ requests, onAddRequest, onCancelRequest, onAd
   const [notes, setNotes] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedAddOns, setSelectedAddOns] = useState<string[]>([]);
+  const [userVehicles, setUserVehicles] = useState<Vehicle[]>([]);
 
-  const vehicles: Vehicle[] = [
-    { id: '1', make: 'Maruti', model: 'Swift', plate: 'CH01-XX-0000', color: 'White' },
-    { id: '2', make: 'Hyundai', model: 'i20', plate: 'PB65-YY-1111', color: 'Red' }
-  ];
+  // OBJECTIVE 3: Dynamic State Migration
+  useEffect(() => {
+    if (user) {
+      const fetchUserVehicles = async () => {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('vehicles')
+          .eq('id', user.id)
+          .single();
+        
+        if (error) {
+          console.error("Error fetching vehicles:", error);
+        } else if (data?.vehicles) {
+          setUserVehicles(data.vehicles as Vehicle[]);
+          // Default to first vehicle if available
+          if ((data.vehicles as Vehicle[]).length > 0) {
+            const v = (data.vehicles as Vehicle[])[0];
+            setVehicleInfo(`${v.make} ${v.model} (${v.plate})`);
+          }
+        }
+      };
+      fetchUserVehicles();
+    }
+  }, [user]);
 
   const activeRequest = requests.find(r => r.status !== 'completed');
 
-  // Actions
+  // OBJECTIVE 4: Geolocation Hardening
+  const getCurrentLocation = () => {
+    setIsLocating(true);
+    if (!navigator.geolocation) {
+      toast.error("Geolocation is not supported by your browser");
+      setIsLocating(false);
+      return;
+    }
+
+    const options = {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 0
+    };
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        setLocation({
+          lat: latitude,
+          lng: longitude,
+          address: `Current Location (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`
+        });
+        setIsLocating(false);
+        setShowLocationPicker(false);
+        toast.success("GPS Lock Acquired!");
+      },
+      (error) => {
+        setIsLocating(false);
+        let errorMsg = "Location access denied.";
+        if (error.code === error.TIMEOUT) errorMsg = "Location request timed out.";
+        
+        toast.error(`${errorMsg} Using Dar es Salaam fallback.`);
+        setLocation({ 
+          lat: -6.7924, 
+          lng: 39.2083, 
+          address: 'Dar es Salaam, Tanzania (Fallback)' 
+        });
+        setShowLocationPicker(false);
+      },
+      options
+    );
+  };
+
   const handleRequestInit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedService) return;
-    setShowPayment(true);
+    confirmAndDispatch();
   };
 
   const confirmAndDispatch = async () => {
     setIsSubmitting(true);
-    await new Promise(resolve => setTimeout(resolve, 1500));
-
-    const totalCost = (selectedService?.price || 0) + 
-                     selectedAddOns.reduce((acc, id) => acc + (SERVICES.find(s => s.id === id)?.price || 0), 0);
-
+    
     const newRequest: Request = {
       id: Math.random().toString(36).substr(2, 9),
       serviceId: selectedService!.id,
@@ -79,42 +147,15 @@ export default function HomePage({ requests, onAddRequest, onCancelRequest, onAd
       timestamp: Date.now(),
       vehicleInfo,
       notes,
-      estimatedArrival: Math.floor(Math.random() * 10) + 10,
-      totalCost
+      userId: user?.id,
+      bids: []
     };
 
     onAddRequest(newRequest);
     setIsSubmitting(false);
-    resetForm();
-    toast.success('Assistance is on the way!');
-  };
-
-  const resetForm = () => {
     setSelectedService(null);
     setSelectedAddOns([]);
-    setVehicleInfo('');
-    setNotes('');
-    setShowPayment(false);
-  };
-
-  const getCurrentLocation = () => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setLocation({
-            lat: position.coords.latitude,
-            lng: position.coords.longitude,
-            address: `Lat: ${position.coords.latitude.toFixed(4)}, Lng: ${position.coords.longitude.toFixed(4)}`
-          });
-          setShowLocationPicker(false);
-        },
-        () => {
-          setLocation({ address: 'Chandigarh Sector 17, Punjab' });
-          setShowLocationPicker(false);
-          toast.error("Location access denied. Using default.");
-        }
-      );
-    }
+    toast.success('Broadcast sent! Nearby garages are being notified.');
   };
 
   const filteredLocations = POPULAR_LOCATIONS.filter(loc => 
@@ -125,21 +166,36 @@ export default function HomePage({ requests, onAddRequest, onCancelRequest, onAd
     <div className="space-y-6 pb-20">
       <AnimatePresence mode="wait">
         {activeRequest ? (
-          /* 1. ACTIVE TRACKING VIEW */
-          <motion.div
-            key="tracking"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-          >
-            <LiveTracking 
-              request={activeRequest} 
-              onCancel={() => onCancelRequest(activeRequest.id)}
-              onNextStep={() => onAdvanceStatus(activeRequest.id)}
-            />
-          </motion.div>
+          <div key="active-flow" className="space-y-6">
+            {activeRequest.status === 'searching' ? (
+              <BidSelector 
+                bids={activeRequest.bids || []} 
+                onAccept={(bid) => onAcceptBid(activeRequest.id, bid)}
+              />
+            ) : (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+              >
+                <LiveTracking 
+                  request={activeRequest} 
+                  onCancel={() => onCancelRequest(activeRequest.id)}
+                  onNextStep={() => onAdvanceStatus(activeRequest.id)}
+                />
+              </motion.div>
+            )}
+            
+            {activeRequest.status === 'searching' && (
+              <button 
+                onClick={() => onCancelRequest(activeRequest.id)}
+                className="w-full py-4 rounded-full bg-subtle text-rose-500 font-black uppercase text-[10px] tracking-widest border border-subtle hover:bg-rose-500/10 transition-all"
+              >
+                Cancel Broadcast
+              </button>
+            )}
+          </div>
         ) : (
-          /* 2. MAIN REQUEST FLOW */
           <motion.div
             key="home"
             initial={{ opacity: 0, y: 20 }}
@@ -147,17 +203,15 @@ export default function HomePage({ requests, onAddRequest, onCancelRequest, onAd
             exit={{ opacity: 0, y: -20 }}
             className="space-y-8"
           >
-            {/* Header Section */}
             <div className="space-y-1">
               <h2 className="text-3xl font-black text-slate-100 italic tracking-tight uppercase">VIYEKO Rescue</h2>
-              <p className="text-slate-500 text-[10px] font-bold uppercase tracking-[0.3em]">Punjab & Chandigarh Emergency Network</p>
+              <p className="text-slate-500 text-[10px] font-bold uppercase tracking-[0.3em]">Live Reverse-Bidding Marketplace</p>
             </div>
 
-            {/* STEP 1: Global Location Selector */}
             <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Step 1: Your Location</h3>
-                {location.address && <span className="text-[9px] font-black text-emerald-500 uppercase tracking-tighter">Coordinates Locked</span>}
+              <div className="flex justify-between items-center px-1">
+                <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">1. Set Pickup Point</h3>
+                {location.lat && <span className="text-[9px] font-black text-emerald-500 uppercase tracking-tighter italic">Precision GPS Active</span>}
               </div>
               <button
                 onClick={() => setShowLocationPicker(true)}
@@ -168,14 +222,14 @@ export default function HomePage({ requests, onAddRequest, onCancelRequest, onAd
               >
                 <div className="flex items-center gap-4 overflow-hidden">
                   <div className={cn(
-                    "p-3 rounded-full transition-all",
-                    location.address ? "bg-emerald-500 text-white shadow-lg shadow-emerald-500/20" : "bg-viyeko-red/10 text-viyeko-red"
+                    "p-3 rounded-full transition-all shadow-xl",
+                    location.lat ? "bg-emerald-500 text-white" : "bg-viyeko-red/10 text-viyeko-red"
                   )}>
                     <MapPin size={24} />
                   </div>
                   <div className="text-left overflow-hidden">
                     <p className="text-slate-100 font-black text-sm italic tracking-tight truncate">
-                      {location.address || "Search breakdown location..."}
+                      {location.address || "Tafuta mahali ulipo..."}
                     </p>
                     <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-0.5">
                       {location.address ? "Tap to change service area" : "Mandatory for dispatch"}
@@ -186,10 +240,9 @@ export default function HomePage({ requests, onAddRequest, onCancelRequest, onAd
               </button>
             </div>
 
-            {/* STEP 2: Service Selection */}
             <div className={cn("space-y-6 transition-all duration-500", !location.address && "opacity-30 grayscale pointer-events-none")}>
-              <div className="space-y-1">
-                <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Step 2: Required Assistance</h3>
+              <div className="space-y-1 px-1">
+                <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">2. Select Assistance Type</h3>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -199,72 +252,44 @@ export default function HomePage({ requests, onAddRequest, onCancelRequest, onAd
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                     onClick={() => setSelectedService(service)}
-                    className="glass-card p-4 flex flex-col items-start gap-2 text-left transition-all hover:border-slate-yellow group relative overflow-hidden"
+                    className="glass-card p-4 flex flex-col items-start gap-3 text-left transition-all hover:border-slate-yellow group relative overflow-hidden"
                   >
-                    <div className={cn("p-2 rounded-full text-white shadow-sm group-hover:scale-110 transition-transform", service.color)}>
+                    <div className={cn("p-2 rounded-full text-white shadow-lg group-hover:scale-110 transition-transform", service.color)}>
                       <service.icon size={20} />
                     </div>
-                    <div className="w-full">
-                      <div className="flex justify-between items-start w-full">
-                        <h3 className="font-bold text-slate-100 text-sm leading-tight uppercase tracking-tight">{service.title}</h3>
-                        <span className="text-[10px] font-black text-slate-yellow">₹{service.price}</span>
-                      </div>
-                      <p className="text-[10px] text-slate-400 mt-0.5 font-medium">{service.subtitle}</p>
-                      <div className="flex items-center gap-1 mt-2 text-[9px] text-slate-500 font-bold uppercase tracking-wider">
-                        <Loader2 size={10} className="animate-spin text-slate-yellow" />
-                        {service.eta}
+                    <div className="w-full space-y-1">
+                      <h3 className="font-black text-slate-100 text-sm leading-tight uppercase tracking-tight">{service.title}</h3>
+                      <p className="text-[9px] text-slate-400 font-medium leading-relaxed">{service.subtitle}</p>
+                      <div className="flex items-center gap-1.5 pt-2">
+                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Get Live Bids</span>
                       </div>
                     </div>
                   </motion.button>
                 ))}
               </div>
-
-              {/* My Vehicles Quick Select */}
-              <div className="space-y-3">
-                <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Quick Vehicle Profile</h3>
-                <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
-                  {vehicles.map(v => (
-                    <button 
-                      key={v.id}
-                      onClick={() => {
-                        setVehicleInfo(`${v.color} ${v.make} ${v.model} (${v.plate})`);
-                        toast.success(`Vehicle selected: ${v.make} ${v.model}`);
-                      }}
-                      className="glass-card p-3 flex flex-col gap-1 min-w-[140px] shrink-0 border-subtle hover:border-slate-yellow/50 transition-all"
-                    >
-                      <div className="flex items-center justify-between">
-                        <Car size={14} className="text-slate-yellow" />
-                        <span className="text-[8px] font-black bg-slate-yellow/10 text-slate-yellow px-1.5 py-0.5 rounded uppercase">{v.plate.split('-')[0]}</span>
-                      </div>
-                      <span className="text-xs font-black text-slate-100">{v.make} {v.model}</span>
-                      <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">{v.color} • {v.plate}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
             </div>
 
-            {/* Emergency Contact Always Visible */}
-            <div className="bg-viyeko-red/10 border border-viyeko-red/20 rounded-full p-5 flex items-center justify-between relative overflow-hidden group">
-              <div className="absolute top-0 right-0 w-24 h-24 bg-viyeko-red/5 rounded-full -mr-12 -mt-12 blur-2xl group-hover:scale-150 transition-transform duration-700" />
-              <div className="flex items-center gap-4 relative z-10">
-                <div className="bg-viyeko-red p-3 rounded-full text-white shadow-lg shadow-viyeko-red/20">
-                  <Phone size={24} />
+            <div className="space-y-3">
+              <div className="bg-viyeko-red/10 border border-viyeko-red/20 rounded-full p-5 flex items-center justify-between relative overflow-hidden group">
+                <div className="absolute top-0 right-0 w-24 h-24 bg-viyeko-red/5 rounded-full -mr-12 -mt-12 blur-2xl group-hover:scale-150 transition-transform duration-700" />
+                <div className="flex items-center gap-4 relative z-10">
+                  <div className="bg-viyeko-red p-3 rounded-full text-white shadow-lg shadow-viyeko-red/20">
+                    <Phone size={24} />
+                  </div>
+                  <div>
+                    <p className="text-slate-100 font-black text-sm italic tracking-tight uppercase">Emergency Hotline</p>
+                    <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">Police / Ambulance</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-slate-100 font-black text-sm italic tracking-tight">EMERGENCY HOTLINE</p>
-                  <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">Immediate Police/Medical Response</p>
-                </div>
+                <a href="tel:112" className="bg-viyeko-red text-white px-5 py-2.5 rounded-full font-bold text-xs hover:bg-viyeko-red-dark transition-all shadow-lg shadow-viyeko-red/20 active:scale-95 relative z-10 uppercase">Call 112</a>
               </div>
-              <a href="tel:112" className="bg-viyeko-red text-white px-5 py-2.5 rounded-full font-bold text-xs hover:bg-viyeko-red-dark transition-all shadow-lg shadow-viyeko-red/20 active:scale-95 relative z-10 uppercase">Call 112</a>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* MODAL OVERLAYS (Highest to Lowest Z-Index) */}
-
-      {/* 1. LOCATION PICKER (Highest Priority) */}
+      {/* LOCATION MODAL */}
       <AnimatePresence>
         {showLocationPicker && (
           <motion.div 
@@ -284,7 +309,7 @@ export default function HomePage({ requests, onAddRequest, onCancelRequest, onAd
                 <h2 className="text-2xl font-black text-slate-100 italic uppercase">Find Location</h2>
                 <button 
                   onClick={() => setShowLocationPicker(false)}
-                  className="p-2 bg-subtle rounded-full text-slate-500 hover:text-slate-300 transition-colors"
+                  className="p-2 bg-subtle rounded-full text-slate-500 hover:text-slate-300"
                 >
                   <X size={20} />
                 </button>
@@ -293,34 +318,35 @@ export default function HomePage({ requests, onAddRequest, onCancelRequest, onAd
               <div className="space-y-4 flex-1 flex flex-col overflow-hidden">
                 <button
                   onClick={getCurrentLocation}
-                  className="w-full bg-slate-yellow text-charcoal rounded-full p-4 flex items-center gap-4 font-black uppercase tracking-widest hover:opacity-90 transition-all shrink-0 shadow-lg shadow-slate-yellow/20"
+                  disabled={isLocating}
+                  className="w-full bg-slate-yellow text-charcoal rounded-full p-4 flex items-center gap-4 font-black uppercase tracking-widest hover:opacity-90 transition-all shrink-0 shadow-lg shadow-slate-yellow/20 disabled:opacity-50"
                 >
                   <div className="bg-white/20 p-2 rounded-full">
-                    <Navigation size={20} />
+                    {isLocating ? <Loader2 size={20} className="animate-spin" /> : <Navigation size={20} />}
                   </div>
-                  <span>Use GPS Precision</span>
+                  <span>{isLocating ? "Acquiring GPS..." : "Use GPS Precision"}</span>
                 </button>
 
                 <div className="relative shrink-0">
                   <input 
                     type="text" 
-                    placeholder="Search Chandigarh, Mohali, Ludhiana..."
+                    placeholder="Dar es Salaam, Dodoma, Arusha..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full bg-subtle border border-subtle rounded-full py-4 px-6 pl-12 text-sm font-bold focus:outline-none focus:border-slate-yellow transition-all text-slate-100 placeholder:text-slate-600"
+                    className="w-full bg-subtle border border-subtle rounded-full py-4 px-6 pl-12 text-sm font-bold focus:outline-none focus:border-slate-yellow transition-all text-slate-100"
                   />
                   <MapPin className="absolute left-4 top-4.5 text-slate-yellow" size={18} />
                 </div>
 
                 <div className="flex-1 overflow-y-auto space-y-2 pr-2 scrollbar-hide pt-2">
-                  <p className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4 mb-2">Popular Regions</p>
+                  <p className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-4 mb-2">Mikoa / Regions</p>
                   {filteredLocations.map((loc) => (
                     <button
                       key={loc}
                       onClick={() => {
                         setLocation({ address: loc });
                         setShowLocationPicker(false);
-                        toast.success(`Dispatch region set: ${loc}`);
+                        toast.success(`Eneo limewekwa: ${loc}`);
                       }}
                       className="w-full p-4 rounded-2xl border border-transparent hover:border-slate-yellow hover:bg-slate-yellow/5 flex items-center gap-4 transition-all text-left group"
                     >
@@ -335,19 +361,7 @@ export default function HomePage({ requests, onAddRequest, onCancelRequest, onAd
         )}
       </AnimatePresence>
 
-      {/* 2. PAYMENT GATEWAY */}
-      <AnimatePresence>
-        {showPayment && selectedService && (
-          <PaymentGate 
-            amount={(selectedService?.price || 0) + selectedAddOns.reduce((acc, id) => acc + (SERVICES.find(s => s.id === id)?.price || 0), 0)}
-            serviceTitle={selectedService.title}
-            onSuccess={confirmAndDispatch}
-            onCancel={() => setShowPayment(false)}
-          />
-        )}
-      </AnimatePresence>
-
-      {/* 3. SERVICE REQUEST MODAL */}
+      {/* REQUEST MODAL */}
       <AnimatePresence>
         {selectedService && (
           <motion.div 
@@ -363,14 +377,14 @@ export default function HomePage({ requests, onAddRequest, onCancelRequest, onAd
               transition={{ type: "spring", damping: 25, stiffness: 200 }}
               className="bg-charcoal w-full max-w-md rounded-t-[3rem] p-8 pb-12 space-y-6 shadow-2xl border-t border-subtle"
             >
-              <div className="flex justify-between items-center">
+              <div className="flex justify-between items-center px-2">
                 <div className="flex items-center gap-4">
                   <div className={cn("p-4 rounded-full text-white shadow-lg", selectedService.color)}>
                     <selectedService.icon size={28} />
                   </div>
                   <div>
                     <h2 className="text-2xl font-black text-slate-100 italic uppercase">{selectedService.title}</h2>
-                    <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest">Base Dispatch: ₹{selectedService.price}</p>
+                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Broadcast to nearby garages</p>
                   </div>
                 </div>
                 <button 
@@ -383,19 +397,33 @@ export default function HomePage({ requests, onAddRequest, onCancelRequest, onAd
 
               <form onSubmit={handleRequestInit} className="space-y-6">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Vehicle Description</label>
-                  <input 
-                    type="text" 
-                    required
-                    placeholder="e.g. White Maruti Swift (CH01-XX-0000)"
-                    value={vehicleInfo}
-                    onChange={(e) => setVehicleInfo(e.target.value)}
-                    className="input-viyeko w-full font-bold"
-                  />
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Stranded Vehicle</label>
+                  {userVehicles.length > 0 ? (
+                    <select 
+                      value={vehicleInfo}
+                      onChange={(e) => setVehicleInfo(e.target.value)}
+                      className="input-viyeko w-full font-bold bg-subtle appearance-none"
+                    >
+                      {userVehicles.map((v) => (
+                        <option key={v.id} value={`${v.make} ${v.model} (${v.plate})`}>
+                          {v.make} {v.model} - {v.plate}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input 
+                      type="text" 
+                      required
+                      placeholder="e.g. Toyota Land Cruiser (T 123 ABC)"
+                      value={vehicleInfo}
+                      onChange={(e) => setVehicleInfo(e.target.value)}
+                      className="input-viyeko w-full font-bold"
+                    />
+                  )}
                 </div>
 
                 <div className="space-y-3">
-                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Rescue Add-ons</label>
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Extra Requirements</label>
                   <div className="grid grid-cols-2 gap-2">
                     {SERVICES.filter(s => s.isAddOn).map((addon) => (
                       <button
@@ -413,10 +441,7 @@ export default function HomePage({ requests, onAddRequest, onCancelRequest, onAd
                             : "bg-subtle border-subtle text-slate-500 hover:border-slate-400"
                         )}
                       >
-                        <div className="flex justify-between items-center w-full">
-                          <span className="text-[10px] font-black uppercase tracking-tight">{addon.title}</span>
-                          <span className="text-[10px] font-black">₹{addon.price}</span>
-                        </div>
+                        <span className="text-[10px] font-black uppercase tracking-tight">{addon.title}</span>
                         <span className="text-[8px] opacity-70 font-bold uppercase">{addon.subtitle}</span>
                       </button>
                     ))}
@@ -426,11 +451,11 @@ export default function HomePage({ requests, onAddRequest, onCancelRequest, onAd
                 <button 
                   type="submit" 
                   disabled={isSubmitting}
-                  className="btn-viyeko-primary w-full disabled:opacity-50 shadow-xl shadow-slate-yellow/10"
+                  className="btn-viyeko-primary w-full h-16 disabled:opacity-50 shadow-xl shadow-slate-yellow/10"
                 >
                   {isSubmitting ? <Loader2 size={24} className="animate-spin" /> : (
                     <div className="flex items-center gap-3">
-                      <span>Secure Checkout</span>
+                      <span className="text-sm">Broadcast Rescue Request</span>
                       <ChevronRight size={20} />
                     </div>
                   )}

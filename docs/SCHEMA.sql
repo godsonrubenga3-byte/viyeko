@@ -1,4 +1,4 @@
--- # VIYEKO FULL SCHEMA MIGRATION (Hardened Snake_Case)
+-- # VIYEKO FULL SCHEMA MIGRATION (Marketplace Edition)
 -- Copy and paste this into your Supabase SQL Editor
 
 -- 1. EXTENSIONS
@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
 
--- Assistance Requests Table (The Core Ledger)
+-- Assistance Requests Table (Dynamic Marketplace Ledger)
 CREATE TABLE IF NOT EXISTS assistance_requests (
   id TEXT PRIMARY KEY,
   service_id TEXT NOT NULL,
@@ -28,9 +28,11 @@ CREATE TABLE IF NOT EXISTS assistance_requests (
   vehicle_info TEXT,
   notes TEXT,
   estimated_arrival INTEGER DEFAULT 15,
-  total_cost INTEGER,
+  total_cost INTEGER DEFAULT 0,
   user_id UUID REFERENCES auth.users(id) NOT NULL,
   provider_id UUID REFERENCES profiles(id),
+  bids JSONB DEFAULT '[]'::jsonb, -- Store live quotes here
+  accepted_bid_id TEXT, -- The ID of the bid the driver selected
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
 
@@ -52,7 +54,7 @@ CREATE POLICY "Users can insert own profile" ON profiles FOR INSERT WITH CHECK (
 ALTER TABLE assistance_requests ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can view own requests" ON assistance_requests FOR SELECT USING (auth.uid() = user_id OR auth.uid() = provider_id);
 CREATE POLICY "Users can insert own requests" ON assistance_requests FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Providers can view searching requests" ON assistance_requests FOR SELECT USING (status = 'searching');
+CREATE POLICY "Providers can view searching requests" ON assistance_requests FOR SELECT USING (status = 'searching' OR status = 'bidding');
 CREATE POLICY "Users can update own requests" ON assistance_requests FOR UPDATE USING (auth.uid() = user_id OR auth.uid() = provider_id);
 
 -- 5. PERFORMANCE INDEXES
