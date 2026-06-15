@@ -1,16 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { Routes, Route, useNavigate } from 'react-router-dom';
+import React, { useState } from 'react';
+import { Routes, Route } from 'react-router-dom';
 import { Toaster, toast } from 'sonner';
-import { AnimatePresence } from 'motion/react';
-
-// Supabase
-import { supabase } from './lib/supabase';
-
-// Types
-import { User as UserType } from './types';
 
 // Context & Hooks
 import { ThemeProvider } from './context/ThemeContext';
+import { useAuth } from './context/AuthContext';
 import { useRequests } from './hooks/useRequests';
 
 // Layouts & Pages
@@ -23,85 +17,72 @@ import ProviderDashboard from './components/ProviderDashboard';
 import AdminPanel from './components/AdminPanel';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
+// Types
+import { User as UserType } from './types';
+
 export default function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(true); // Temporarily disabled
-  const [isProviderMode, setIsProviderMode] = useState(false);
-  const [user, setUser] = useState<UserType>({
-    id: 'dev-user-123',
-    name: 'Developer Mode',
-    phone: '+91 98765 43210',
-    email: 'dev@viyeko.com',
-    avatar: 'https://picsum.photos/seed/dev/200/200'
+  const { user: authUser, loading: authLoading, signOut, role } = useAuth();
+  const { requests, addRequest, advanceStatus, cancelRequest } = useRequests();
+  
+  // Persistent Developer Role for testing
+  const [devRole, setDevRole] = useState<'driver' | 'provider' | 'admin' | null>(() => {
+    return (localStorage.getItem('viyeko_dev_role') as any) || null;
   });
 
-  const { requests, addRequest, advanceStatus, cancelRequest } = useRequests();
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    // Check initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        setIsAuthenticated(true);
-        setUser({
-          id: session.user.id,
-          name: session.user.user_metadata.full_name || session.user.email?.split('@')[0] || 'Member',
-          phone: session.user.user_metadata.phone || '+91 98765 43210',
-          email: session.user.email || '',
-          avatar: session.user.user_metadata.avatar_url || `https://picsum.photos/seed/${session.user.id}/200/200`
-        });
-      }
-    });
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) {
-        setIsAuthenticated(true);
-        setUser({
-          id: session.user.id,
-          name: session.user.user_metadata.full_name || session.user.email?.split('@')[0] || 'Member',
-          phone: session.user.user_metadata.phone || '+91 98765 43210',
-          email: session.user.email || '',
-          avatar: session.user.user_metadata.avatar_url || `https://picsum.photos/seed/${session.user.id}/200/200`
-        });
-      } else {
-        setIsAuthenticated(false);
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
+  const handleDevBypass = (role: string) => {
+    localStorage.setItem('viyeko_dev_role', role);
+    setDevRole(role as any);
+  };
 
   const handleLogout = async () => {
     try {
-      await supabase.auth.signOut();
+      if (devRole) {
+        localStorage.removeItem('viyeko_dev_role');
+        setDevRole(null);
+      } else {
+        await signOut();
+      }
       toast.success('Logged out safely');
     } catch (err) {
       toast.error('Logout failed');
     }
   };
 
-  const toggleProviderMode = () => {
-    setIsProviderMode(!isProviderMode);
-    navigate('/');
-  };
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-[#121212] flex items-center justify-center">
+        <div className="w-12 h-12 border-4 border-slate-yellow border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
-  if (!isAuthenticated) {
+  if (!authUser && !devRole) {
     return (
       <ErrorBoundary>
         <Toaster position="top-center" richColors />
-        <AuthScreen onBack={() => setIsAuthenticated(true)} />
+        <AuthScreen onBypass={handleDevBypass} />
       </ErrorBoundary>
     );
   }
+
+  const roleToUse = devRole || role;
+
+  const user: UserType = {
+    id: authUser?.id || '00000000-0000-0000-0000-000000000000',
+    name: authUser?.user_metadata.full_name || 'Developer Mode',
+    phone: authUser?.user_metadata.phone || '+91 98765 43210',
+    email: authUser?.email || 'dev@viyeko.com',
+    avatar: authUser?.user_metadata.avatar_url || `https://picsum.photos/seed/dev/200/200`
+  };
 
   return (
     <ThemeProvider>
       <ErrorBoundary>
         <Toaster position="top-center" richColors />
         <Routes>
-          <Route element={<MainLayout user={user} isProviderMode={isProviderMode} toggleProviderMode={toggleProviderMode} />}>
+          <Route element={<MainLayout user={user} />}>
             <Route path="/" element={
-              isProviderMode ? (
+              roleToUse === 'provider' || roleToUse === 'admin' ? (
                 <ProviderDashboard 
                   requests={requests}
                   onAccept={advanceStatus}
@@ -119,7 +100,7 @@ export default function App() {
             } />
             <Route path="/history" element={<HistoryPage requests={requests} />} />
             <Route path="/profile" element={<ProfilePage user={user} onLogout={handleLogout} />} />
-            <Route path="/admin" element={<AdminPanel />} />
+            <Route path="/admin" element={roleToUse === 'admin' ? <AdminPanel /> : <HomePage requests={requests} onAddRequest={addRequest} onCancelRequest={cancelRequest} onAdvanceStatus={advanceStatus} />} />
           </Route>
         </Routes>
       </ErrorBoundary>

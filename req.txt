@@ -1,0 +1,14 @@
+## Authorzation
+https://ivdqtfzpovpcszcivhux.supabase.co/auth/v1/oauth/authorize
+
+## Token EndPiont
+https://ivdqtfzpovpcszcivhux.supabase.co/auth/v1/oauth/token
+
+## JKWS endpoints
+https://ivdqtfzpovpcszcivhux.supabase.co/auth/v1/.well-known/jwks.json
+
+## OIDC discovery
+https://ivdqtfzpovpcszcivhux.supabase.co/auth/v1/.well-known/openid-configuration
+
+## Authorzation path
+/oauth/consent

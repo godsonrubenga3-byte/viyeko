@@ -1,16 +1,32 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Mail, Lock, LogIn, UserPlus, Github, Chrome, Loader2, ArrowLeft, AlertCircle, CheckCircle2, Phone } from 'lucide-react';
+import { 
+  Mail, 
+  Lock, 
+  LogIn, 
+  UserPlus, 
+  Github, 
+  Chrome, 
+  Loader2, 
+  ArrowLeft, 
+  AlertCircle, 
+  CheckCircle2, 
+  Phone, 
+  ShieldCheck,
+  Send
+} from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 
 interface AuthScreenProps {
-  onBack?: () => void;
+  onBypass?: (role: string) => void;
 }
 
-export default function AuthScreen({ onBack }: AuthScreenProps) {
-  const [isLogin, setIsLogin] = useState(true);
+type AuthView = 'login' | 'register' | 'forgot-password';
+
+export default function AuthScreen({ onBypass }: AuthScreenProps) {
+  const [view, setView] = useState<AuthView>('login');
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -20,20 +36,23 @@ export default function AuthScreen({ onBack }: AuthScreenProps) {
   const [vehicleModel, setVehicleModel] = useState('');
   const [vehiclePlate, setVehiclePlate] = useState('');
   const [vehicleColor, setVehicleColor] = useState('');
+  const [selectedRole, setSelectedRole] = useState<'driver' | 'provider'>('driver');
   const [error, setError] = useState<string | null>(null);
 
-  const handleGoogleSignIn = async () => {
+  const handleGoogleSignIn = async (forcedRole?: string) => {
     setLoading(true);
     setError(null);
-    
-    // Developer Bypass: Login with mock data instead of real Google OAuth
-    toast.info('Bypassing Google Auth (Dev Mode)...');
-    setTimeout(() => {
-      if (onBack) onBack(); 
-      setLoading(false);
-    }, 800);
 
-    /* Real logic commented out for dev mode
+    // Developer Bypass Logic
+    if (forcedRole && onBypass) {
+      toast.info(`Bypassing as ${forcedRole}...`);
+      setTimeout(() => {
+        onBypass(forcedRole);
+        setLoading(false);
+      }, 800);
+      return;
+    }
+
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -43,12 +62,32 @@ export default function AuthScreen({ onBack }: AuthScreenProps) {
       });
       if (error) throw error;
     } catch (err: any) {
+      console.error('Google Auth Error:', err);
       setError(err.message || 'Failed to sign in with Google');
       toast.error('Google sign-in failed');
     } finally {
       setLoading(false);
     }
-    */
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/profile`,
+      });
+      if (error) throw error;
+      toast.success('Password reset link sent to your email!');
+      setView('login');
+    } catch (err: any) {
+      setError(err.message || 'Failed to send reset link');
+      toast.error('Reset failed');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -57,14 +96,14 @@ export default function AuthScreen({ onBack }: AuthScreenProps) {
     setError(null);
 
     try {
-      if (isLogin) {
+      if (view === 'login') {
         const { error } = await supabase.auth.signInWithPassword({
           email,
           password
         });
         if (error) throw error;
         toast.success('Welcome back!');
-      } else {
+      } else if (view === 'register') {
         const { error } = await supabase.auth.signUp({
           email,
           password,
@@ -72,12 +111,13 @@ export default function AuthScreen({ onBack }: AuthScreenProps) {
             data: {
               full_name: name,
               phone: phone,
-              vehicle_info: {
+              role: selectedRole,
+              vehicle_info: selectedRole === 'driver' ? {
                 make: vehicleMake,
                 model: vehicleModel,
                 plate: vehiclePlate,
                 color: vehicleColor
-              }
+              } : null
             }
           }
         });
@@ -130,35 +170,37 @@ export default function AuthScreen({ onBack }: AuthScreenProps) {
           </motion.h1>
           <div className="text-center space-y-1">
             <h2 className="text-2xl font-black text-slate-100 italic uppercase tracking-tight">
-              {isLogin ? 'Member Login' : 'Join Network'}
+              {view === 'login' ? 'Member Login' : view === 'register' ? 'Join Network' : 'Reset Access'}
             </h2>
             <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em]">
-              {isLogin ? 'Secure access to assistance' : 'Experience Punjab\'s best service'}
+              {view === 'login' ? 'Secure access to assistance' : view === 'register' ? 'Experience Punjab\'s best service' : 'Enter your registered email'}
             </p>
           </div>
         </div>
 
         {/* Tab Switcher */}
-        <div className="flex bg-subtle p-1 rounded-full border border-subtle shadow-inner">
-          <button 
-            onClick={() => { setIsLogin(true); setError(null); }}
-            className={cn(
-              "flex-1 py-3 rounded-full text-[10px] font-black uppercase tracking-widest transition-all duration-300",
-              isLogin ? "bg-slate-yellow text-charcoal shadow-lg" : "text-slate-500 hover:text-slate-300"
-            )}
-          >
-            Sign In
-          </button>
-          <button 
-            onClick={() => { setIsLogin(false); setError(null); }}
-            className={cn(
-              "flex-1 py-3 rounded-full text-[10px] font-black uppercase tracking-widest transition-all duration-300",
-              !isLogin ? "bg-slate-yellow text-charcoal shadow-lg" : "text-slate-500 hover:text-slate-300"
-            )}
-          >
-            Register
-          </button>
-        </div>
+        {view !== 'forgot-password' && (
+          <div className="flex bg-subtle p-1 rounded-full border border-subtle shadow-inner">
+            <button 
+              onClick={() => { setView('login'); setError(null); }}
+              className={cn(
+                "flex-1 py-3 rounded-full text-[10px] font-black uppercase tracking-widest transition-all duration-300",
+                view === 'login' ? "bg-slate-yellow text-charcoal shadow-lg" : "text-slate-500 hover:text-slate-300"
+              )}
+            >
+              Sign In
+            </button>
+            <button 
+              onClick={() => { setView('register'); setError(null); }}
+              className={cn(
+                "flex-1 py-3 rounded-full text-[10px] font-black uppercase tracking-widest transition-all duration-300",
+                view === 'register' ? "bg-slate-yellow text-charcoal shadow-lg" : "text-slate-500 hover:text-slate-300"
+              )}
+            >
+              Register
+            </button>
+          </div>
+        )}
 
         <AnimatePresence mode="wait">
           {error && (
@@ -174,151 +216,222 @@ export default function AuthScreen({ onBack }: AuthScreenProps) {
           )}
         </AnimatePresence>
 
-        <form onSubmit={handleSubmit} className="space-y-5 max-h-[60vh] overflow-y-auto pr-2 scrollbar-hide">
-          {!isLogin && (
-            <div className="space-y-4 pt-2 border-b border-subtle pb-6 mb-6">
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.15em] ml-1 flex items-center gap-2">
-                  <LogIn size={12} className="text-slate-yellow" />
-                  Legal Full Name
-                </label>
-                <input 
-                  type="text" 
-                  required
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Godson Rubenga"
-                  className="input-viyeko w-full h-14 text-sm tracking-tight"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.15em] ml-1 flex items-center gap-2">
-                  <Phone size={12} className="text-slate-yellow" />
-                  Primary Phone
-                </label>
-                <input 
-                  type="tel" 
-                  required
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="e.g. +91 98765 43210"
-                  className="input-viyeko w-full h-14 text-sm tracking-tight"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.15em] ml-1">Make</label>
-                  <input 
-                    type="text" 
-                    required
-                    value={vehicleMake}
-                    onChange={(e) => setVehicleMake(e.target.value)}
-                    placeholder="Maruti"
-                    className="input-viyeko w-full h-14 text-sm tracking-tight"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.15em] ml-1">Model</label>
-                  <input 
-                    type="text" 
-                    required
-                    value={vehicleModel}
-                    onChange={(e) => setVehicleModel(e.target.value)}
-                    placeholder="Swift"
-                    className="input-viyeko w-full h-14 text-sm tracking-tight"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.15em] ml-1">Plate</label>
-                  <input 
-                    type="text" 
-                    required
-                    value={vehiclePlate}
-                    onChange={(e) => setVehiclePlate(e.target.value)}
-                    placeholder="CH01-XX-0000"
-                    className="input-viyeko w-full h-14 text-sm tracking-tight uppercase"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.15em] ml-1">Color</label>
-                  <input 
-                    type="text" 
-                    required
-                    value={vehicleColor}
-                    onChange={(e) => setVehicleColor(e.target.value)}
-                    placeholder="White"
-                    className="input-viyeko w-full h-14 text-sm tracking-tight"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div className="space-y-2">
-            <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.15em] ml-1 flex items-center gap-2">
-              <Mail size={12} className="text-slate-yellow" />
-              Email Identity
-            </label>
-            <input 
-              type="email" 
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="e.g. rubenga@viyeko.com"
-              className="input-viyeko w-full h-14 text-sm tracking-tight"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex justify-between items-center ml-1">
-              <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.15em] flex items-center gap-2">
-                <Lock size={12} className="text-slate-yellow" />
-                Access Key
+        {view === 'forgot-password' ? (
+          <form onSubmit={handleForgotPassword} className="space-y-6">
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.15em] ml-1 flex items-center gap-2">
+                <Mail size={12} className="text-slate-yellow" />
+                Registered Email
               </label>
-              {isLogin && <button type="button" className="text-[9px] font-bold text-slate-600 hover:text-slate-400 uppercase tracking-tighter">Forgot?</button>}
+              <input 
+                type="email" 
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="e.g. rahul@viyeko.com"
+                className="input-viyeko w-full h-14 text-sm tracking-tight"
+              />
             </div>
-            <input 
-              type="password" 
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••••••"
-              className="input-viyeko w-full h-14 text-sm tracking-tight"
-            />
-          </div>
+            <button 
+              type="submit" 
+              disabled={loading}
+              className="btn-viyeko-primary w-full h-14 shadow-xl shadow-slate-yellow/10"
+            >
+              {loading ? <Loader2 size={20} className="animate-spin" /> : (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-black uppercase tracking-widest">Send Reset Link</span>
+                  <Send size={18} />
+                </div>
+              )}
+            </button>
+            <button 
+              type="button"
+              onClick={() => setView('login')}
+              className="w-full text-[10px] font-black text-slate-500 hover:text-slate-300 uppercase tracking-widest flex items-center justify-center gap-2"
+            >
+              <ArrowLeft size={14} />
+              Back to Login
+            </button>
+          </form>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-5 max-h-[60vh] overflow-y-auto pr-2 scrollbar-hide">
+            {view === 'register' && (
+              <div className="space-y-6 pt-2 border-b border-subtle pb-6 mb-6">
+                {/* Role Selection */}
+                <div className="space-y-3">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.15em] ml-1">Select Account Type</label>
+                  <div className="flex bg-subtle p-1 rounded-2xl border border-subtle">
+                    <button 
+                      type="button"
+                      onClick={() => setSelectedRole('driver')}
+                      className={cn(
+                        "flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
+                        selectedRole === 'driver' ? "bg-slate-yellow text-charcoal shadow-lg" : "text-slate-500 hover:text-slate-300"
+                      )}
+                    >
+                      Driver
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={() => setSelectedRole('provider')}
+                      className={cn(
+                        "flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
+                        selectedRole === 'provider' ? "bg-slate-yellow text-charcoal shadow-lg" : "text-slate-500 hover:text-slate-300"
+                      )}
+                    >
+                      Rescue Garage
+                    </button>
+                  </div>
+                </div>
 
-          <button 
-            type="submit" 
-            disabled={loading}
-            className="btn-viyeko-primary w-full h-14 shadow-xl shadow-slate-yellow/10"
-          >
-            {loading ? (
-              <div className="flex items-center gap-3">
-                <Loader2 size={20} className="animate-spin" />
-                <span className="text-[10px] font-black uppercase tracking-widest">Processing...</span>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-black uppercase tracking-widest">
-                  {isLogin ? 'Authorize Entry' : 'Create Profile'}
-                </span>
-                <LogIn size={20} className="ml-1" />
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.15em] ml-1 flex items-center gap-2">
+                    <LogIn size={12} className="text-slate-yellow" />
+                    {selectedRole === 'driver' ? 'Legal Full Name' : 'Garage / Business Name'}
+                  </label>
+                  <input 
+                    type="text" 
+                    required
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder={selectedRole === 'driver' ? "e.g. Rahul Singh" : "e.g. Punjab Auto Care"}
+                    className="input-viyeko w-full h-14 text-sm tracking-tight"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.15em] ml-1 flex items-center gap-2">
+                    <Phone size={12} className="text-slate-yellow" />
+                    Primary Phone
+                  </label>
+                  <input 
+                    type="tel" 
+                    required
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="e.g. +91 98765 43210"
+                    className="input-viyeko w-full h-14 text-sm tracking-tight"
+                  />
+                </div>
+
+                {selectedRole === 'driver' && (
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.15em] ml-1">Make</label>
+                        <input 
+                          type="text" 
+                          required
+                          value={vehicleMake}
+                          onChange={(e) => setVehicleMake(e.target.value)}
+                          placeholder="Maruti"
+                          className="input-viyeko w-full h-14 text-sm tracking-tight"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.15em] ml-1">Model</label>
+                        <input 
+                          type="text" 
+                          required
+                          value={vehicleModel}
+                          onChange={(e) => setVehicleModel(e.target.value)}
+                          placeholder="Swift"
+                          className="input-viyeko w-full h-14 text-sm tracking-tight"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.15em] ml-1">Plate</label>
+                        <input 
+                          type="text" 
+                          required
+                          value={vehiclePlate}
+                          onChange={(e) => setVehiclePlate(e.target.value)}
+                          placeholder="CH01-XX-0000"
+                          className="input-viyeko w-full h-14 text-sm tracking-tight uppercase"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.15em] ml-1">Color</label>
+                        <input 
+                          type="text" 
+                          required
+                          value={vehicleColor}
+                          onChange={(e) => setVehicleColor(e.target.value)}
+                          placeholder="White"
+                          className="input-viyeko w-full h-14 text-sm tracking-tight"
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             )}
-          </button>
-          <button 
-            type="button"
-            onClick={onBack}
-            className="w-full text-[9px] font-black text-slate-700 hover:text-slate-500 uppercase tracking-[0.3em] py-2 transition-colors"
-          >
-            Bypass Authentication (Dev Mode)
-          </button>
-        </form>
+
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.15em] ml-1 flex items-center gap-2">
+                <Mail size={12} className="text-slate-yellow" />
+                Email Identity
+              </label>
+              <input 
+                type="email" 
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="e.g. rahul@viyeko.com"
+                className="input-viyeko w-full h-14 text-sm tracking-tight"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex justify-between items-center ml-1">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.15em] flex items-center gap-2">
+                  <Lock size={12} className="text-slate-yellow" />
+                  Access Key
+                </label>
+                {view === 'login' && (
+                  <button 
+                    type="button" 
+                    onClick={() => { setView('forgot-password'); setError(null); }}
+                    className="text-[9px] font-black text-slate-600 hover:text-slate-yellow uppercase tracking-tighter transition-colors"
+                  >
+                    Forgot?
+                  </button>
+                )}
+              </div>
+              <input 
+                type="password" 
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••••••"
+                className="input-viyeko w-full h-14 text-sm tracking-tight"
+              />
+            </div>
+
+            <button 
+              type="submit" 
+              disabled={loading}
+              className="btn-viyeko-primary w-full h-14 shadow-xl shadow-slate-yellow/10"
+            >
+              {loading ? (
+                <div className="flex items-center gap-3">
+                  <Loader2 size={20} className="animate-spin" />
+                  <span className="text-[10px] font-black uppercase tracking-widest">Processing...</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-black uppercase tracking-widest">
+                    {view === 'login' ? 'Authorize Entry' : 'Create Profile'}
+                  </span>
+                  <LogIn size={20} className="ml-1" />
+                </div>
+              )}
+            </button>
+          </form>
+        )}
 
         <div className="relative py-2">
           <div className="absolute inset-0 flex items-center">
@@ -333,19 +446,20 @@ export default function AuthScreen({ onBack }: AuthScreenProps) {
           <motion.button 
             whileHover={{ scale: 1.02, backgroundColor: 'rgba(255,255,255,0.08)' }}
             whileTap={{ scale: 0.98 }}
-            onClick={handleGoogleSignIn}
+            onClick={() => handleGoogleSignIn('driver')}
             className="flex items-center justify-center gap-3 p-4 bg-subtle border border-subtle rounded-full transition-all text-[10px] font-black text-slate-300 uppercase tracking-widest shadow-lg"
           >
             <Chrome size={18} className="text-slate-yellow" />
-            Google
+            Bypass Driver
           </motion.button>
           <motion.button 
             whileHover={{ scale: 1.02, backgroundColor: 'rgba(255,255,255,0.08)' }}
             whileTap={{ scale: 0.98 }}
+            onClick={() => handleGoogleSignIn('provider')}
             className="flex items-center justify-center gap-3 p-4 bg-subtle border border-subtle rounded-full transition-all text-[10px] font-black text-slate-300 uppercase tracking-widest shadow-lg"
           >
-            <Github size={18} />
-            GitHub
+            <ShieldCheck size={18} className="text-emerald-500" />
+            Bypass Garage
           </motion.button>
         </div>
 

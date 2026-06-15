@@ -8,12 +8,40 @@ export function useRequests() {
   const [loading, setLoading] = useState(true);
   const channelRef = useRef<any>(null);
 
-  // Helper to check if credentials are valid (not placeholders)
   const hasValidCreds = useCallback(() => {
     const url = import.meta.env.VITE_SUPABASE_URL;
     const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
     return url && key && !url.includes('YOUR_SUPABASE_URL') && !key.includes('YOUR_PUBLISHABLE_KEY');
   }, []);
+
+  const mapToFrontend = (dbReq: any): Request => ({
+    id: dbReq.id,
+    serviceId: dbReq.service_id,
+    addOnIds: dbReq.addon_ids,
+    status: dbReq.status,
+    location: dbReq.location,
+    timestamp: dbReq.timestamp,
+    vehicleInfo: dbReq.vehicle_info,
+    notes: dbReq.notes,
+    estimatedArrival: dbReq.estimated_arrival,
+    totalCost: dbReq.total_cost,
+    userId: dbReq.user_id,
+    providerId: dbReq.provider_id
+  });
+
+  const mapToDatabase = (req: Request) => ({
+    id: req.id,
+    service_id: req.serviceId,
+    addon_ids: req.addOnIds,
+    status: req.status,
+    location: req.location,
+    timestamp: req.timestamp,
+    vehicle_info: req.vehicleInfo,
+    notes: req.notes,
+    estimated_arrival: req.estimatedArrival,
+    total_cost: req.totalCost,
+    user_id: req.userId || '00000000-0000-0000-0000-000000000000'
+  });
 
   const fetchRequests = useCallback(async () => {
     if (!hasValidCreds()) {
@@ -30,7 +58,7 @@ export function useRequests() {
         .order('timestamp', { ascending: false });
 
       if (error) throw error;
-      setRequests(data || []);
+      setRequests((data || []).map(mapToFrontend));
     } catch (err) {
       console.error('Error fetching requests:', err);
       const saved = localStorage.getItem('viyeko_requests');
@@ -40,18 +68,14 @@ export function useRequests() {
     }
   }, [hasValidCreds]);
 
-  // Initial fetch
   useEffect(() => {
     fetchRequests();
   }, [fetchRequests]);
 
-  // Real-time subscription hardening
   useEffect(() => {
     if (!hasValidCreds()) return;
 
-    // Create a unique channel ID to avoid collisions during HMR/Strict Mode
     const channelId = `reqs_${Math.random().toString(36).substring(7)}`;
-    
     const channel = supabase
       .channel(channelId)
       .on('postgres_changes', { 
@@ -62,21 +86,16 @@ export function useRequests() {
         if (payload.eventType === 'INSERT') {
           setRequests(prev => {
             if (prev.some(r => r.id === payload.new.id)) return prev;
-            return [payload.new as Request, ...prev];
+            return [mapToFrontend(payload.new), ...prev];
           });
         } else if (payload.eventType === 'UPDATE') {
-          setRequests(prev => prev.map(req => req.id === payload.new.id ? (payload.new as Request) : req));
-          toast.info(`Request updated: ${payload.new.status}`);
+          setRequests(prev => prev.map(req => req.id === payload.new.id ? mapToFrontend(payload.new) : req));
+          toast.info(`Request status updated: ${payload.new.status}`);
         }
       });
 
-    // Store in ref and subscribe
     channelRef.current = channel;
-    channel.subscribe((status) => {
-      if (status === 'SUBSCRIBED') {
-        console.log('Successfully subscribed to assistance_requests');
-      }
-    });
+    channel.subscribe();
 
     return () => {
       if (channelRef.current) {
@@ -91,21 +110,20 @@ export function useRequests() {
       const updated = [newRequest, ...requests];
       setRequests(updated);
       localStorage.setItem('viyeko_requests', JSON.stringify(updated));
-      toast.success('Mock Mode: Request saved locally');
+      toast.success('Offline mode: Request saved');
       return;
     }
 
     try {
       const { error } = await supabase
         .from('assistance_requests')
-        .insert([newRequest]);
+        .insert([mapToDatabase(newRequest)]);
 
       if (error) throw error;
     } catch (err) {
       console.error('Error adding request:', err);
       setRequests(prev => [newRequest, ...prev]);
       localStorage.setItem('viyeko_requests', JSON.stringify([newRequest, ...requests]));
-      toast.warning('Offline: Request saved locally.');
     }
   };
 
@@ -133,7 +151,7 @@ export function useRequests() {
         .from('assistance_requests')
         .update({ 
           status: nextStatus,
-          estimatedArrival: nextStatus === 'completed' ? 0 : Math.max(0, (req.estimatedArrival || 0) - 3)
+          estimated_arrival: nextStatus === 'completed' ? 0 : Math.max(0, (req.estimatedArrival || 0) - 3)
         })
         .eq('id', requestId);
 

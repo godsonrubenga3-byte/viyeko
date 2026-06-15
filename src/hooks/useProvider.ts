@@ -20,9 +20,9 @@ export function useProvider(userId: string | undefined) {
   }, [userId]);
 
   async function fetchProfile() {
-    if (!import.meta.env.VITE_SUPABASE_URL || userId === 'dev-user-123') {
+    if (!import.meta.env.VITE_SUPABASE_URL || userId === '00000000-0000-0000-0000-000000000000') {
       setProfile({
-        id: 'dev-user-123',
+        id: '00000000-0000-0000-0000-000000000000',
         is_online: false,
         full_name: 'Developer Mode',
         rating: 5.0,

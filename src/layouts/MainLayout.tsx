@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
 import { 
   Navigation, 
@@ -7,9 +7,10 @@ import {
   ShieldCheck, 
   Sun, 
   Moon, 
-  Phone 
+  LayoutDashboard
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
 import { cn } from '../lib/utils';
 import { User } from '../types';
 import NotificationSystem from '../components/NotificationSystem';
@@ -17,25 +18,30 @@ import { useRequests } from '../hooks/useRequests';
 
 interface MainLayoutProps {
   user: User;
-  isProviderMode: boolean;
-  toggleProviderMode: () => void;
 }
 
-export default function MainLayout({ user, isProviderMode, toggleProviderMode }: MainLayoutProps) {
+export default function MainLayout({ user }: MainLayoutProps) {
   const { theme, toggleTheme } = useTheme();
+  const { role } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const { requests } = useRequests();
 
+  // Navigation logic strictly derived from Verified Role
   const navItems = [
-    { id: 'home', label: 'Home', path: '/', icon: Navigation },
+    { 
+      id: 'home', 
+      label: role === 'driver' ? 'Request' : 'Dashboard', 
+      path: '/', 
+      icon: role === 'driver' ? Navigation : LayoutDashboard 
+    },
     { id: 'history', label: 'History', path: '/history', icon: History },
     { id: 'profile', label: 'Profile', path: '/profile', icon: Activity },
   ];
 
-  // Only show Admin in Provider Mode (assuming providers have higher access) or hide it entirely for now as requested
-  if (isProviderMode) {
-    navItems.push({ id: 'admin', label: 'Admin', path: '/admin', icon: ShieldCheck });
+  // Admin access is exclusive and locked
+  if (role === 'admin') {
+    navItems.push({ id: 'admin', label: 'Control', path: '/admin', icon: ShieldCheck });
   }
 
   return (
@@ -53,20 +59,18 @@ export default function MainLayout({ user, isProviderMode, toggleProviderMode }:
             <img src={user.avatar} alt={user.name} className="w-10 h-10 rounded-full border border-slate-yellow/50" />
             <div className="flex flex-col">
               <span className="text-xs font-black text-slate-100">{user.name}</span>
-              <span className="text-[10px] text-slate-500 font-bold">{user.phone}</span>
+              <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">{role === 'provider' ? 'Service Garage' : role || 'Member'}</span>
             </div>
           </div>
 
           <div className="flex md:flex-col items-center md:items-start gap-3 w-full">
-            <button 
-              onClick={toggleProviderMode}
-              className={cn(
-                "px-3 py-1.5 md:w-full md:text-center rounded-full text-[10px] font-bold uppercase tracking-widest transition-all",
-                isProviderMode ? "bg-slate-yellow text-charcoal" : "bg-subtle text-slate-100 hover:bg-slate-500/10"
-              )}
-            >
-              {isProviderMode ? "Provider Mode" : "User Mode"}
-            </button>
+            {/* Connection Status */}
+            {!navigator.onLine && (
+              <div className="bg-rose-500 text-white px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest animate-pulse w-full text-center md:text-left">
+                Offline Mode
+              </div>
+            )}
+            
             <button 
               onClick={toggleTheme}
               className="p-2 bg-subtle rounded-full hover:bg-slate-500/10 transition-colors flex items-center gap-2 md:w-full md:justify-center"
@@ -79,7 +83,9 @@ export default function MainLayout({ user, isProviderMode, toggleProviderMode }:
             </button>
           </div>
         </div>
-        <p className="text-slate-400 text-sm font-medium relative z-10 mb-8 hidden md:block">Reliable Roadside Assistance in Punjab & Chandigarh</p>
+        <p className="text-slate-400 text-sm font-medium relative z-10 mb-8 hidden md:block">
+          {role === 'provider' ? 'Garage Management Console' : 'Reliable Roadside Assistance in Punjab'}
+        </p>
         
         {/* Desktop Navigation */}
         <div className="hidden md:flex flex-col gap-2 relative z-10">
@@ -100,9 +106,9 @@ export default function MainLayout({ user, isProviderMode, toggleProviderMode }:
 
         <div className="mt-auto relative z-10 hidden md:block">
           <div className="p-4 bg-subtle rounded-full border border-subtle">
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Support</p>
-            <p className="text-xs text-slate-300">Need help? Call our 24/7 dispatch center.</p>
-            <a href="tel:112" className="mt-3 block text-center bg-slate-500/10 hover:bg-slate-500/20 py-2 rounded-full text-xs font-bold transition-colors">112 Emergency</a>
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Platform Support</p>
+            <p className="text-xs text-slate-300">Operational assistance is available 24/7.</p>
+            <a href="tel:112" className="mt-3 block text-center bg-slate-500/10 hover:bg-slate-500/20 py-2 rounded-full text-xs font-bold transition-colors">112 Dispatch</a>
           </div>
         </div>
       </header>

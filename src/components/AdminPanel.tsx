@@ -11,11 +11,31 @@ import {
   AlertTriangle,
   Globe,
   RefreshCw,
-  Download
+  Download,
+  Trash2
 } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { supabase } from '../lib/supabase';
+import { toast } from 'sonner';
 
 export default function AdminPanel() {
+  const handleClearData = async () => {
+    if (!confirm('WARNING: This will permanently delete ALL assistance requests. Continue?')) return;
+    
+    try {
+      const { error } = await supabase
+        .from('assistance_requests')
+        .delete()
+        .neq('id', '0'); // Filter required for delete
+
+      if (error) throw error;
+      toast.success('Database cleared successfully');
+    } catch (err: any) {
+      console.error('Reset Error:', err);
+      toast.error('Failed: ' + (err.message || 'Permission denied'));
+    }
+  };
+
   const metrics = [
     { label: 'Total Users', value: '1,284', icon: Users, color: 'text-blue-400' },
     { label: 'Active Providers', value: '42', icon: ShieldCheck, color: 'text-emerald-400' },
@@ -31,6 +51,13 @@ export default function AdminPanel() {
           <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">Platform Administration & Oversight</p>
         </div>
         <div className="flex gap-2">
+          <button 
+            onClick={handleClearData}
+            className="p-2 bg-rose-500/10 border border-rose-500/20 rounded-full text-rose-500 hover:bg-rose-500 hover:text-white transition-all"
+            title="Clear All Requests"
+          >
+            <Trash2 size={20} />
+          </button>
           <button className="p-2 bg-subtle border border-subtle rounded-full text-slate-400 hover:opacity-80 transition-all">
             <RefreshCw size={20} />
           </button>
