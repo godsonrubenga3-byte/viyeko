@@ -1,42 +1,32 @@
 {
   "name": "VIYEKO Architecture",
-  "description": "High-level architectural overview of the VIYEKO roadside assistance platform.",
+  "description": "Production architectural overview of the VIYEKO roadside assistance platform.",
+  "stack": {
+    "frontend": "React 19, TypeScript, Vite, Tailwind CSS v4, Framer Motion",
+    "hosting": "Vercel (Serverless PWA)",
+    "database": "Supabase PostgreSQL",
+    "authentication": "Supabase Auth (Email/Password, Google OAuth)",
+    "realtime": "Ably WebSockets (Regional Broadcasts & Private Bid Channels)",
+    "backendLogic": "Supabase Edge Functions (Deno/TypeScript)"
+  },
   "stateManagement": {
-    "type": "React Hooks & LocalStorage",
-    "keyObjects": {
-      "activeTab": "Controls primary navigation (Home, History, Profile)",
-      "requests": "Array of Request objects, persisted to localStorage",
-      "selectedService": "The service currently being configured in the modal",
-      "user": "Hardcoded/Mocked user profile data (Firebase Auth bypassed)",
-      "vehicles": "User vehicle list state"
+    "type": "React Context & Hooks (Supabase Realtime + Ably)",
+    "keyContexts": {
+      "AuthContext": "Manages Global Session, User metadata, and strictly fetched DB Roles (Driver vs Provider)",
+      "ThemeContext": "Manages Dark/Light mode preferences",
+      "useRequests": "Custom hook bridging Supabase persistent state with Ably sub-second updates"
     }
   },
-  "dataPersistence": {
-    "storage": "Browser LocalStorage (Auth data currently bypassed)",
-    "keys": {
-      "requests": "viyeko_requests",
-      "theme": "viyeko_theme"
-    }
+  "dataFlow": {
+    "auth": "Google/Email -> Supabase Auth -> PostgreSQL Trigger -> Profiles Table",
+    "bidding": "Driver (Ably Broadcast) -> Garage -> Garage Bids (Ably Private Channel + Supabase JSONB update) -> Driver Accepts -> Supabase Row Level Security enforced update"
   },
-  "uiPatterns": [
-    "Glassmorphism (semi-transparent backgrounds and blurs)",
-    "Mobile-first responsive layout with desktop sidebar",
-    "Interactive status timelines with Framer Motion",
-    "Simulated real-time updates"
-  ],
-  "missingFeatures": [
-    "Real-time Backend (No actual server for request dispatching)",
-    "Authentication (No user login/registration system)",
-    "Real Map Integration (Currently uses a simulated/mock map component)",
-    "Payment Gateway (Cost calculation exists but no checkout process)",
-    "Push Notifications (Necessary for background status updates)",
-    "Service Provider App (Currently just a toggle mode in the client app)"
-  ],
-  "recommendations": [
-    "Integrate Firebase or Supabase for real-time synchronization and Auth.",
-    "Implement Google Maps or Mapbox for actual location tracking and ETAs.",
-    "Add Razorpay or Stripe for payment processing in India.",
-    "Transition to a dedicated Provider App using a shared component library.",
-    "Implement PWA (Progressive Web App) features for offline functionality and home screen installation."
-  ]
+  "security": {
+    "RowLevelSecurity": "Strict policies enforcing that drivers only mutate their own requests and providers only update requests they are bidding on.",
+    "AblyTokens": "Root keys removed. Edge Function via Supabase issues short-lived JWTs to the client."
+  },
+  "productionRisks": {
+    "auditLink": "./researches/PRODUCTION_AUDIT.md",
+    "status": "Documented. Mitigation strategies outlined for Data Race Conditions, SEO, and Offline Sync."
+  }
 }

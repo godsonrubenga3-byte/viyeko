@@ -33,8 +33,9 @@ CREATE TABLE IF NOT EXISTS assistance_requests (
   provider_id UUID REFERENCES profiles(id),
   bids JSONB DEFAULT '[]'::jsonb, -- Store live quotes here
   accepted_bid_id TEXT, -- The ID of the bid the driver selected
+  last_updated_by TEXT, -- Tracks who made the latest change ('driver' or 'provider')
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
-);
+  );
 
 -- 3. REALTIME CONFIGURATION
 BEGIN;

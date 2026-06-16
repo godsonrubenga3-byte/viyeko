@@ -45,7 +45,7 @@ export interface Request {
   id: string;
   serviceId: string;
   addOnIds?: string[];
-  status: 'searching' | 'bidding' | 'assigned' | 'on-the-way' | 'arrived' | 'in-progress' | 'completed';
+  status: 'searching' | 'bidding' | 'assigned' | 'on-the-way' | 'arrived' | 'in-progress' | 'completed' | 'canceled';
   location: {
     lat?: number;
     lng?: number;
@@ -60,6 +60,7 @@ export interface Request {
   providerId?: string;
   bids?: Bid[]; // Live collection of quotes from garages
   acceptedBidId?: string;
+  lastUpdatedBy?: 'driver' | 'provider';
 }
 
 export const SERVICES: Service[] = [

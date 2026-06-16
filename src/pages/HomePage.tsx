@@ -23,8 +23,8 @@ import BidSelector from '../components/BidSelector';
 interface HomePageProps {
   requests: Request[];
   onAddRequest: (req: Request) => void;
-  onCancelRequest: (id: string) => void;
-  onAdvanceStatus: (id: string) => void;
+  onCancelRequest: (id: string, role?: 'driver' | 'provider') => void;
+  onAdvanceStatus: (id: string, role?: 'driver' | 'provider') => void;
   onAcceptBid: (requestId: string, bid: Bid) => void;
 }
 
@@ -66,7 +66,7 @@ export default function HomePage({ requests, onAddRequest, onCancelRequest, onAd
           .from('profiles')
           .select('vehicles')
           .eq('id', user.id)
-          .single();
+          .maybeSingle();
         
         if (error) {
           console.error("Error fetching vehicles:", error);
@@ -83,7 +83,7 @@ export default function HomePage({ requests, onAddRequest, onCancelRequest, onAd
     }
   }, [user]);
 
-  const activeRequest = requests.find(r => r.status !== 'completed');
+  const activeRequest = requests.find(r => r.status !== 'completed' && r.status !== 'canceled');
 
   // OBJECTIVE 4: Geolocation Hardening
   const getCurrentLocation = () => {
@@ -167,7 +167,7 @@ export default function HomePage({ requests, onAddRequest, onCancelRequest, onAd
       <AnimatePresence mode="wait">
         {activeRequest ? (
           <div key="active-flow" className="space-y-6">
-            {activeRequest.status === 'searching' ? (
+            {(activeRequest.status === 'searching' || activeRequest.status === 'bidding') ? (
               <BidSelector 
                 bids={activeRequest.bids || []} 
                 onAccept={(bid) => onAcceptBid(activeRequest.id, bid)}
@@ -180,20 +180,20 @@ export default function HomePage({ requests, onAddRequest, onCancelRequest, onAd
               >
                 <LiveTracking 
                   request={activeRequest} 
-                  onCancel={() => onCancelRequest(activeRequest.id)}
-                  onNextStep={() => onAdvanceStatus(activeRequest.id)}
+                  onCancel={() => onCancelRequest(activeRequest.id, 'driver')}
+                  onNextStep={() => onAdvanceStatus(activeRequest.id, 'driver')}
                 />
-              </motion.div>
-            )}
-            
-            {activeRequest.status === 'searching' && (
-              <button 
-                onClick={() => onCancelRequest(activeRequest.id)}
+                </motion.div>
+                )}
+
+                {(activeRequest.status === 'searching' || activeRequest.status === 'bidding') && (
+                <button 
+                onClick={() => onCancelRequest(activeRequest.id, 'driver')}
                 className="w-full py-4 rounded-full bg-subtle text-rose-500 font-black uppercase text-[10px] tracking-widest border border-subtle hover:bg-rose-500/10 transition-all"
-              >
+                >
                 Cancel Broadcast
-              </button>
-            )}
+                </button>
+                )}
           </div>
         ) : (
           <motion.div

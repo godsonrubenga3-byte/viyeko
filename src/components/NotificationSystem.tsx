@@ -1,30 +1,79 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Request, SERVICES } from '../types';
-import { Bell, CheckCircle2, Car, MapPin, ShieldCheck, AlertCircle } from 'lucide-react';
+import { Bell, CheckCircle2, Car, MapPin, ShieldCheck, AlertCircle, WifiOff, Wifi } from 'lucide-react';
+import { ably } from '../lib/ably';
 
 interface NotificationSystemProps {
   requests: Request[];
 }
 
 export default function NotificationSystem({ requests }: NotificationSystemProps) {
-  useEffect(() => {
-    // This would normally be a Firestore listener
-    // For now, we'll watch the requests array for status changes
-    const activeRequests = requests.filter(r => r.status !== 'completed');
-    
-    activeRequests.forEach(req => {
-      const service = SERVICES.find(s => s.id === req.serviceId);
-      
-      // Simulate checking for "new" status changes
-      // In a real app, you'd compare against previous state or use Firestore onSnapshot
-    });
-  }, [requests]);
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
+  const [ablyState, setAblyState] = useState<string>('initialized');
 
+  // OBJECTIVE: Connectivity & Networking Resilience
+  useEffect(() => {
+    // 1. Browser Network State
+    const handleOnline = () => {
+      setIsOffline(false);
+      toast.success('Internet Connection Restored', {
+        icon: <Wifi className="text-emerald-500" />,
+        duration: 3000
+      });
+    };
+    const handleOffline = () => {
+      setIsOffline(true);
+      toast.error('Internet Connection Lost', {
+        description: 'You are currently offline. Real-time updates are paused.',
+        icon: <WifiOff className="text-rose-500" />,
+        duration: Infinity
+      });
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    // 2. Ably WebSocket State
+    if (ably) {
+      const handleAblyState = (stateChange: any) => {
+        setAblyState(stateChange.current);
+        if (stateChange.current === 'disconnected' || stateChange.current === 'suspended' || stateChange.current === 'failed') {
+          toast.error('Dispatch Network Disconnected', {
+            description: 'Attempting to reconnect to the live marketplace...',
+            icon: <AlertCircle className="text-rose-500" />,
+            duration: Infinity,
+            id: 'ably-disconnect'
+          });
+        } else if (stateChange.current === 'connected') {
+          toast.dismiss('ably-disconnect');
+          if (stateChange.previous !== 'initialized') {
+             toast.success('Dispatch Network Connected', { duration: 2000 });
+          }
+        }
+      };
+
+      ably.connection.on(handleAblyState);
+
+      return () => {
+        window.removeEventListener('online', handleOnline);
+        window.removeEventListener('offline', handleOffline);
+        ably.connection.off(handleAblyState);
+      };
+    }
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  // Rest of the existing code...
   // Static helper to trigger themed notifications
   const notifyStatusUpdate = (status: Request['status'], serviceTitle: string) => {
     const config = {
       searching: { title: 'Searching...', icon: Bell, color: 'text-slate-yellow' },
+      bidding: { title: 'Bids Incoming...', icon: Bell, color: 'text-slate-yellow' },
       assigned: { title: 'Provider Assigned!', icon: ShieldCheck, color: 'text-emerald-500' },
       'on-the-way': { title: 'On the Way!', icon: Car, color: 'text-blue-500' },
       arrived: { title: 'Provider Arrived!', icon: MapPin, color: 'text-rose-500' },
@@ -32,7 +81,7 @@ export default function NotificationSystem({ requests }: NotificationSystemProps
       completed: { title: 'Service Completed', icon: CheckCircle2, color: 'text-emerald-500' },
     };
 
-    const current = config[status];
+    const current = config[status] || config['searching'];
 
     toast.custom((t) => (
       <div className="glass-card p-4 flex items-center gap-4 border-subtle shadow-2xl min-w-[300px]">
@@ -53,8 +102,7 @@ export default function NotificationSystem({ requests }: NotificationSystemProps
     ), { duration: 4000 });
   };
 
-  // Expose helper globally for demo purposes
   (window as any).notifyStatusUpdate = notifyStatusUpdate;
 
-  return null; // This component doesn't render anything itself
+  return null; 
 }

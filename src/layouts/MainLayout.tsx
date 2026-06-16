@@ -39,11 +39,6 @@ export default function MainLayout({ user }: MainLayoutProps) {
     { id: 'profile', label: 'Profile', path: '/profile', icon: Activity },
   ];
 
-  // Admin access is exclusive and locked
-  if (role === 'admin') {
-    navItems.push({ id: 'admin', label: 'Control', path: '/admin', icon: ShieldCheck });
-  }
-
   return (
     <div className="min-h-screen bg-charcoal flex flex-col md:flex-row w-full max-w-md md:max-w-6xl mx-auto shadow-2xl relative overflow-hidden font-sans transition-colors duration-300 edge-lighting">
       <NotificationSystem requests={requests} />

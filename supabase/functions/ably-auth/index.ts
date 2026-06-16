@@ -1,11 +1,14 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import * as crypto from "https://deno.land/std@0.168.0/crypto/mod.ts"
-import { encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/base64.ts"
+// Import the official Ably REST SDK (works in Deno/Edge)
+import * as Ably from "https://esm.sh/ably@1.2.46/build/ably-web-worker.min.js"
 
 const ABLY_API_KEY = Deno.env.get("ABLY_API_KEY") || ""
 
+// Initialize a single REST client instance for the edge function
+const restClient = new Ably.Rest(ABLY_API_KEY)
+
 serve(async (req) => {
-  // 1. Handle CORS Preflight
+  // CORS Preflight
   if (req.method === "OPTIONS") {
     return new Response("ok", {
       headers: {
@@ -21,48 +24,21 @@ serve(async (req) => {
     const clientId = url.searchParams.get("clientId") || "anonymous"
 
     if (!ABLY_API_KEY) {
-      throw new Error("ABLY_API_KEY not set in Edge Function secrets")
+      throw new Error("ABLY_API_KEY environment variable is missing")
     }
 
-    const [keyName, keySecret] = ABLY_API_KEY.split(":")
-    const ttl = "3600000"
-    const capability = JSON.stringify({ "*": ["*"] })
-    const timestamp = Date.now().toString()
-    const nonce = Math.random().toString(36).substring(2)
+    // Use the official SDK to generate a Token Request
+    // This guarantees the exact format, signature, and App ID that Ably expects
+    const tokenRequestData = await restClient.auth.createTokenRequest({
+      clientId: clientId,
+      capability: JSON.stringify({ "*": ["*"] }),
+      ttl: 3600000 // 1 hour
+    })
 
-    // Ably Canonical String: keyName, ttl, capability, clientId, timestamp, nonce
-    const stringToSign = `${keyName}\n${ttl}\n${capability}\n${clientId}\n${timestamp}\n${nonce}\n`
-
-    // HMAC-SHA256 Sign
-    const encoder = new TextEncoder()
-    const keyData = encoder.encode(keySecret)
-    const messageData = encoder.encode(stringToSign)
-
-    const cryptoKey = await crypto.subtle.importKey(
-      "raw",
-      keyData,
-      { name: "HMAC", hash: "SHA-256" },
-      false,
-      ["sign"]
-    )
-
-    const signature = await crypto.subtle.sign("HMAC", cryptoKey, messageData)
-    const mac = base64Encode(new Uint8Array(signature))
-
-    const tokenRequest = {
-      keyName,
-      ttl,
-      capability,
-      clientId,
-      timestamp,
-      nonce,
-      mac,
-    }
-
-    return new Response(JSON.stringify(tokenRequest), {
-      headers: {
-        "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*",
+    return new Response(JSON.stringify(tokenRequestData), {
+      headers: { 
+        "Content-Type": "application/json", 
+        "Access-Control-Allow-Origin": "*" 
       },
       status: 200,
     })

@@ -26,8 +26,8 @@ import { toast } from 'sonner';
 
 interface ProviderDashboardProps {
   requests: Request[];
-  onAccept: (requestId: string) => void;
-  onComplete: (requestId: string) => void;
+  onAccept: (requestId: string, role?: 'driver' | 'provider') => void;
+  onComplete: (requestId: string, role?: 'driver' | 'provider') => void;
   onSendBid: (requestId: string, bid: Bid) => void;
   userId: string;
 }
@@ -269,7 +269,7 @@ export default function ProviderDashboard({ requests, onAccept, onComplete, onSe
                           </div>
                         </div>
                         <button 
-                          onClick={() => onComplete(req.id)}
+                          onClick={() => onComplete(req.id, 'provider')}
                           className="w-full h-12 bg-emerald-500 text-white rounded-full text-xs font-black uppercase tracking-widest hover:bg-emerald-600 transition-all flex items-center justify-center gap-2"
                         >
                           Mark as Completed

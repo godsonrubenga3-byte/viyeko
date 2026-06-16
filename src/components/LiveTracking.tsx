@@ -30,6 +30,7 @@ export default function LiveTracking({ request, onCancel, onNextStep }: LiveTrac
     { id: 'arrived', label: 'Arrived', icon: MapPin },
     { id: 'in-progress', label: 'In Progress', icon: Activity },
     { id: 'completed', label: 'Completed', icon: CheckCircle2 },
+    { id: 'canceled', label: 'Canceled', icon: X },
   ];
 
   const currentStepIndex = steps.findIndex(s => s.id === request.status);
@@ -93,6 +94,7 @@ export default function LiveTracking({ request, onCancel, onNextStep }: LiveTrac
                      request.status === 'on-the-way' ? 'Provider is moving to your location' :
                      request.status === 'arrived' ? 'Provider has arrived!' :
                      request.status === 'in-progress' ? 'Service is being performed' :
+                     request.status === 'canceled' ? 'This request was canceled.' :
                      'Service completed!'}
                   </span>
                 )}

@@ -53,9 +53,9 @@ export function useRequests() {
         channel.unsubscribe(event, callback);
       });
     };
-  }, [requests.length]); 
+    }, [requests.map(r => `${r.id}-${r.status}`).join(',')]); 
 
-  // HELPER: Check credentials
+    // HELPER: Check credentials
   const hasValidCreds = useCallback(() => {
     const url = import.meta.env.VITE_SUPABASE_URL;
     const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
@@ -75,7 +75,17 @@ export function useRequests() {
     totalCost: dbReq.total_cost,
     userId: dbReq.user_id,
     providerId: dbReq.provider_id,
-    bids: dbReq.bids || [],
+    lastUpdatedBy: dbReq.last_updated_by,
+    // Map relational bids or fallback to empty array
+    bids: (dbReq.bids || []).map((b: any) => ({
+      id: b.id,
+      providerId: b.provider_id,
+      providerName: b.provider_name,
+      price: b.price,
+      eta: b.eta,
+      rating: b.rating,
+      timestamp: b.timestamp
+    })),
     acceptedBidId: dbReq.accepted_bid_id
   });
 
@@ -91,8 +101,14 @@ export function useRequests() {
       notes: req.notes,
       estimated_arrival: req.estimatedArrival || 15,
       total_cost: req.totalCost || 0,
-      user_id: req.userId || '00000000-0000-0000-0000-000000000000'
+      last_updated_by: req.lastUpdatedBy
     };
+
+    // Only set user_id if provided, otherwise let RLS handle it or fail
+    if (req.userId && req.userId !== '00000000-0000-0000-0000-000000000000') {
+      data.user_id = req.userId;
+    }
+
     if (req.bids && req.bids.length > 0) data.bids = req.bids;
     if (req.acceptedBidId) data.accepted_bid_id = req.acceptedBidId;
     if (req.providerId) data.provider_id = req.providerId;
@@ -108,9 +124,11 @@ export function useRequests() {
     }
 
     try {
+      // MITIGATION: JSONB Race Condition
+      // Fetch requests and join with the new assistance_bids table
       const { data, error } = await supabase
         .from('assistance_requests')
-        .select('*')
+        .select('*, bids:assistance_bids(*)')
         .order('timestamp', { ascending: false });
 
       if (error) throw error;
@@ -160,20 +178,26 @@ export function useRequests() {
       ably.channels.get(ABLY_CHANNELS.requestBids(requestId)).publish('new-bid', bid);
     }
 
-    // Persist to DB with fresh state check
+    // MITIGATION: JSONB Race Condition
+    // Insert bid into dedicated relational table instead of array appending
     try {
-      const { data } = await supabase
-        .from('assistance_requests')
-        .select('bids')
-        .eq('id', requestId)
-        .single();
-      
-      const currentBids = data?.bids || [];
-      const updatedBids = [...currentBids, bid];
+      await supabase
+        .from('assistance_bids')
+        .insert([{
+          id: bid.id,
+          request_id: requestId,
+          provider_id: bid.providerId,
+          provider_name: bid.providerName,
+          price: bid.price,
+          eta: bid.eta,
+          rating: bid.rating,
+          timestamp: bid.timestamp
+        }]);
 
+      // Update the main request status to 'bidding'
       await supabase
         .from('assistance_requests')
-        .update({ bids: updatedBids, status: 'bidding' })
+        .update({ status: 'bidding' })
         .eq('id', requestId);
     } catch (err) {
       console.error('Bid submission failed:', err);
@@ -198,24 +222,23 @@ export function useRequests() {
       return;
     }
 
+    // MITIGATION: Client-Side Pricing Trust
+    // Call the secure Edge Function to lock the contract
     try {
-      await supabase
-        .from('assistance_requests')
-        .update({ 
-          status: 'assigned',
-          provider_id: bid.providerId,
-          accepted_bid_id: bid.id,
-          total_cost: bid.price,
-          estimated_arrival: bid.eta
-        })
-        .eq('id', requestId);
+      const { data, error } = await supabase.functions.invoke('accept-bid', {
+        body: { requestId, bidId: bid.id }
+      });
+
+      if (error) throw error;
       toast.success(`Rescue confirmed with ${bid.providerName}`);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Accept error:', err);
+      toast.error('Failed to securely confirm rescue. Please try again.');
     }
   };
 
-  const advanceStatus = async (requestId: string) => {
+
+  const advanceStatus = async (requestId: string, updaterRole: 'driver' | 'provider' = 'provider') => {
     const req = requests.find(r => r.id === requestId);
     if (!req) return;
 
@@ -225,38 +248,45 @@ export function useRequests() {
 
     if (ably) {
       const channel = ably.channels.get(ABLY_CHANNELS.requestStatus(requestId));
-      channel.publish('status-change', { status: nextStatus });
+      channel.publish('status-change', { status: nextStatus, lastUpdatedBy: updaterRole });
     }
 
     if (!hasValidCreds()) {
-      setRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: nextStatus } : r));
+      setRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: nextStatus, lastUpdatedBy: updaterRole } : r));
       return;
     }
 
     try {
       await supabase
         .from('assistance_requests')
-        .update({ status: nextStatus })
+        .update({ 
+          status: nextStatus,
+          last_updated_by: updaterRole
+        })
         .eq('id', requestId);
     } catch (err) {
       console.error('Status update failed:', err);
     }
   };
 
-  const cancelRequest = async (requestId: string) => {
+  const cancelRequest = async (requestId: string, updaterRole: 'driver' | 'provider' = 'driver') => {
     if (ably) {
-      ably.channels.get(ABLY_CHANNELS.requestStatus(requestId)).publish('status-change', { status: 'completed' });
+      const channel = ably.channels.get(ABLY_CHANNELS.requestStatus(requestId));
+      channel.publish('status-change', { status: 'canceled', lastUpdatedBy: updaterRole });
     }
 
     if (!hasValidCreds()) {
-      setRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: 'completed' as const } : r));
+      setRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: 'canceled' as const, lastUpdatedBy: updaterRole } : r));
       return;
     }
 
     try {
       await supabase
         .from('assistance_requests')
-        .update({ status: 'completed' })
+        .update({ 
+          status: 'canceled',
+          last_updated_by: updaterRole
+        })
         .eq('id', requestId);
       toast.error('Rescue Request Cancelled');
     } catch (err) {

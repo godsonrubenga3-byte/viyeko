@@ -1,11 +1,10 @@
 import * as Ably from 'ably';
 
-// SECURE AUTHENTICATION: Using Token Requests via Supabase Edge Function
-// This replaces the Julia backend for easier deployment.
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+// SECURE AUTHENTICATION: Using Token Requests via Node.js Backend
+const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8080';
 
 export const ably = new Ably.Realtime({
-  authUrl: `${supabaseUrl}/functions/v1/ably-auth`,
+  authUrl: `${backendUrl}/auth/ably`,
   authMethod: 'GET',
 });
 
