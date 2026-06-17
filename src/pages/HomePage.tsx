@@ -181,7 +181,6 @@ export default function HomePage({ requests, onAddRequest, onCancelRequest, onAd
                 <LiveTracking 
                   request={activeRequest} 
                   onCancel={() => onCancelRequest(activeRequest.id, 'driver')}
-                  onNextStep={() => onAdvanceStatus(activeRequest.id, 'driver')}
                 />
                 </motion.div>
                 )}

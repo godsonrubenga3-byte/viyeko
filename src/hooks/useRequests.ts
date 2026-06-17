@@ -13,10 +13,8 @@ export function useRequests() {
     if (!ably) return;
 
     const activeRequests = requests.filter(r => 
-      r.status === 'searching' || 
-      r.status === 'bidding' || 
-      r.status === 'assigned' || 
-      r.status === 'on-the-way'
+      r.status !== 'completed' && 
+      r.status !== 'canceled'
     );
     
     const activeChannels: { channel: any; event: string; callback: any }[] = [];
@@ -41,8 +39,8 @@ export function useRequests() {
       // 2. Subscribe to Status Updates
       const statusChannel = ably.channels.get(ABLY_CHANNELS.requestStatus(req.id));
       const statusCallback = (message: any) => {
-        const { status } = message.data;
-        setRequests(prev => prev.map(r => r.id === req.id ? { ...r, status } : r));
+        const { status, lastUpdatedBy } = message.data;
+        setRequests(prev => prev.map(r => r.id === req.id ? { ...r, status, lastUpdatedBy } : r));
       };
       statusChannel.subscribe('status-change', statusCallback);
       activeChannels.push({ channel: statusChannel, event: 'status-change', callback: statusCallback });
@@ -104,14 +102,12 @@ export function useRequests() {
       last_updated_by: req.lastUpdatedBy
     };
 
-    // Only set user_id if provided, otherwise let RLS handle it or fail
+    // Use current user ID for the request
     if (req.userId && req.userId !== '00000000-0000-0000-0000-000000000000') {
       data.user_id = req.userId;
     }
 
-    if (req.bids && req.bids.length > 0) data.bids = req.bids;
-    if (req.acceptedBidId) data.accepted_bid_id = req.acceptedBidId;
-    if (req.providerId) data.provider_id = req.providerId;
+    // Note: We no longer send 'bids' here as they live in their own table
     return data;
   };
 
@@ -124,8 +120,8 @@ export function useRequests() {
     }
 
     try {
-      // MITIGATION: JSONB Race Condition
-      // Fetch requests and join with the new assistance_bids table
+      // Fetch ALL requests for the user (or open ones for providers)
+      // The filtering for 'History' vs 'Active' happens in the UI components
       const { data, error } = await supabase
         .from('assistance_requests')
         .select('*, bids:assistance_bids(*)')
@@ -135,8 +131,6 @@ export function useRequests() {
       setRequests((data || []).map(mapToFrontend));
     } catch (err: any) {
       console.error('Error fetching requests:', err);
-      const saved = localStorage.getItem('viyeko_requests');
-      if (saved) setRequests(JSON.parse(saved));
     } finally {
       setLoading(false);
     }
@@ -149,14 +143,19 @@ export function useRequests() {
   const addRequest = async (newRequest: Request) => {
     const preparedReq = { ...newRequest, status: 'searching' as const };
     
+    // 1. Optimistic Update
+    setRequests(prev => [preparedReq, ...prev]);
+
+    // 2. Real-time Broadcast
     if (ably) {
       const channel = ably.channels.get(ABLY_CHANNELS.regionBroadcast('Tanzania'));
       channel.publish('new-breakdown', preparedReq);
     }
 
+    // 3. Persistence
     if (!hasValidCreds()) {
-      const updated = [preparedReq, ...requests];
-      setRequests(updated);
+      const saved = localStorage.getItem('viyeko_requests') || '[]';
+      const updated = [preparedReq, ...JSON.parse(saved)];
       localStorage.setItem('viyeko_requests', JSON.stringify(updated));
       return;
     }
@@ -167,9 +166,14 @@ export function useRequests() {
         .insert([mapToDatabase(preparedReq)]);
       
       if (error) throw error;
+      
+      // Refresh to get the server-side state (including proper IDs)
+      fetchRequests();
     } catch (err: any) {
       console.error('Error adding request:', err);
-      setRequests(prev => [preparedReq, ...prev]);
+      toast.error("Connection error: Request not saved to cloud.");
+      // Rollback optimistic update on error
+      setRequests(prev => prev.filter(r => r.id !== preparedReq.id));
     }
   };
 
@@ -178,15 +182,14 @@ export function useRequests() {
       ably.channels.get(ABLY_CHANNELS.requestBids(requestId)).publish('new-bid', bid);
     }
 
-    // MITIGATION: JSONB Race Condition
-    // Insert bid into dedicated relational table instead of array appending
     try {
-      await supabase
+      // 1. Insert into relational bids table
+      const { error: bidError } = await supabase
         .from('assistance_bids')
         .insert([{
           id: bid.id,
           request_id: requestId,
-          provider_id: bid.providerId,
+          // provider_id is handled by database default (auth.uid())
           provider_name: bid.providerName,
           price: bid.price,
           eta: bid.eta,
@@ -194,20 +197,27 @@ export function useRequests() {
           timestamp: bid.timestamp
         }]);
 
-      // Update the main request status to 'bidding'
+      if (bidError) throw bidError;
+
+      // 2. Update status and track that a provider made the change
       await supabase
         .from('assistance_requests')
-        .update({ status: 'bidding' })
+        .update({ 
+          status: 'bidding',
+          last_updated_by: 'provider'
+        })
         .eq('id', requestId);
+        
     } catch (err) {
       console.error('Bid submission failed:', err);
+      toast.error("Failed to submit bid.");
     }
   };
 
   const acceptBid = async (requestId: string, bid: Bid) => {
     if (ably) {
       const channel = ably.channels.get(ABLY_CHANNELS.requestStatus(requestId));
-      channel.publish('status-change', { status: 'assigned' });
+      channel.publish('status-change', { status: 'assigned', lastUpdatedBy: 'driver' });
     }
 
     if (!hasValidCreds()) {
@@ -231,6 +241,7 @@ export function useRequests() {
 
       if (error) throw error;
       toast.success(`Rescue confirmed with ${bid.providerName}`);
+      fetchRequests(); // Ensure we have the latest state from server
     } catch (err: any) {
       console.error('Accept error:', err);
       toast.error('Failed to securely confirm rescue. Please try again.');

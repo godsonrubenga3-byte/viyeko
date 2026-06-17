@@ -1,7 +1,7 @@
 import * as Ably from 'ably';
 
 // SECURE AUTHENTICATION: Using Token Requests via Node.js Backend
-const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8080';
+const backendUrl = import.meta.env.VITE_BACKEND_URL || 'https://viyeko.onrender.com';
 
 export const ably = new Ably.Realtime({
   authUrl: `${backendUrl}/auth/ably`,

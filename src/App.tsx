@@ -151,7 +151,7 @@ export default function App() {
                   onAccept={advanceStatus}
                   onComplete={advanceStatus}
                   onSendBid={submitBid}
-                  userId={user.id}
+                  userId={authUser.id}
                 />
               </ProtectedRoute>
             } 
