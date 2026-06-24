@@ -35,7 +35,12 @@ import {
   Award,
   ThumbsUp,
   Briefcase,
-  Smile
+  Smile,
+  Trash2,
+  Truck,
+  CornerUpRight,
+  Calendar,
+  Check
 } from 'lucide-react';
 import { SERVICES, ServiceType, Request, Service, User as UserType, Vehicle } from './types';
 import { cn } from './lib/utils';
@@ -56,9 +61,11 @@ import {
   query, 
   where, 
   getDocs, 
+  getDoc,
   doc, 
   setDoc, 
-  updateDoc 
+  updateDoc,
+  deleteDoc
 } from 'firebase/firestore';
 
 const POPULAR_LOCATIONS = [
@@ -635,26 +642,53 @@ export default function App() {
     { sender: 'agent', text: 'Jambo! Warm welcome to VIYEKO Care. You can type any service query or custom modifications/servicing requests below, and our care personnel will coordinate with you and our mobile valet team immediately.' }
   ]);
 
+  // Global set of recent notifications to prevent duplication
+  const shownToastsRef = React.useRef<Record<string, number>>({});
+
   // Context-aware notification filter based on whether User or Provider mode is active
   const notify = {
     success: (msg: string, target: 'user' | 'provider' | 'both' = 'both') => {
       if (target === 'user' && isProviderMode) return;
       if (target === 'provider' && !isProviderMode) return;
+      
+      const now = Date.now();
+      const lastShown = shownToastsRef.current[msg] || 0;
+      if (now - lastShown < 2000) return; // Deduplicate
+      shownToastsRef.current[msg] = now;
+      
       toast.success(msg);
     },
     error: (msg: string, target: 'user' | 'provider' | 'both' = 'both') => {
       if (target === 'user' && isProviderMode) return;
       if (target === 'provider' && !isProviderMode) return;
+      
+      const now = Date.now();
+      const lastShown = shownToastsRef.current[msg] || 0;
+      if (now - lastShown < 2000) return; // Deduplicate
+      shownToastsRef.current[msg] = now;
+      
       toast.error(msg);
     },
     info: (msg: string, target: 'user' | 'provider' | 'both' = 'both') => {
       if (target === 'user' && isProviderMode) return;
       if (target === 'provider' && !isProviderMode) return;
+      
+      const now = Date.now();
+      const lastShown = shownToastsRef.current[msg] || 0;
+      if (now - lastShown < 2000) return; // Deduplicate
+      shownToastsRef.current[msg] = now;
+      
       toast.info(msg);
     },
     warning: (msg: string, target: 'user' | 'provider' | 'both' = 'both') => {
       if (target === 'user' && isProviderMode) return;
       if (target === 'provider' && !isProviderMode) return;
+      
+      const now = Date.now();
+      const lastShown = shownToastsRef.current[msg] || 0;
+      if (now - lastShown < 2000) return; // Deduplicate
+      shownToastsRef.current[msg] = now;
+      
       toast.warning(msg);
     }
   };
@@ -750,7 +784,13 @@ export default function App() {
     phone: '+255 712 345 678',
     email: 'ally.salum@viyeko.com',
     avatar: 'https://images.unsplash.com/photo-1628157582853-a796fa650a6a?auto=format&fit=crop&q=80&w=300',
-    isOnline: true
+    isOnline: true,
+    vehicleMake: 'Toyota',
+    vehicleModel: 'Hilux Heavy Tow',
+    vehiclePlate: 'T 123 ABC',
+    vehicleColor: 'Yellow',
+    services: ['breakdown', 'tire', 'fuel', 'wash'],
+    region: 'Dar es Salaam'
   });
 
   // Editing state for profiles (aligned and dynamic)
@@ -765,6 +805,12 @@ export default function App() {
   const [editProviderPhone, setEditProviderPhone] = useState('+255 712 345 678');
   const [editProviderEmail, setEditProviderEmail] = useState('ally.salum@viyeko.com');
   const [editProviderAvatar, setEditProviderAvatar] = useState('https://images.unsplash.com/photo-1628157582853-a796fa650a6a?auto=format&fit=crop&q=80&w=300');
+  const [editProviderVehicleMake, setEditProviderVehicleMake] = useState('Toyota');
+  const [editProviderVehicleModel, setEditProviderVehicleModel] = useState('Hilux Heavy Tow');
+  const [editProviderVehiclePlate, setEditProviderVehiclePlate] = useState('T 123 ABC');
+  const [editProviderVehicleColor, setEditProviderVehicleColor] = useState('Yellow');
+  const [editProviderServices, setEditProviderServices] = useState<string[]>(['breakdown', 'tire', 'fuel', 'wash']);
+  const [editProviderRegion, setEditProviderRegion] = useState('Dar es Salaam');
 
   const [vehicles, setVehicles] = useState<Vehicle[]>([
     { id: '1', make: 'Maruti', model: 'Swift', plate: 'CH01-XX-0000', color: 'White' },
@@ -1012,7 +1058,13 @@ export default function App() {
   };
 
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
+  const [providerHomeSubTab, setProviderHomeSubTab] = useState<'emergencies' | 'bookings'>('emergencies');
+  const [transferringRequestId, setTransferringRequestId] = useState<string | null>(null);
+  const [transferringJobId, setTransferringJobId] = useState<string | null>(null);
   const [showAddVehicle, setShowAddVehicle] = useState(false);
+  const [vehicleToDelete, setVehicleToDelete] = useState<string | null>(null);
+  const [showSettingsResetConfirm, setShowSettingsResetConfirm] = useState(false);
+  const [showEmergencyModal, setShowEmergencyModal] = useState(false);
   const [newVehicleMake, setNewVehicleMake] = useState('');
   const [newVehicleModel, setNewVehicleModel] = useState('');
   const [newVehiclePlate, setNewVehiclePlate] = useState('');
@@ -1033,8 +1085,12 @@ export default function App() {
   };
 
   const toggleProviderMode = () => {
-    setIsProviderMode(!isProviderMode);
+    const nextMode = !isProviderMode;
+    setIsProviderMode(nextMode);
     setActiveTab('home');
+    if (nextMode) {
+      fetchActiveSearchingRequests();
+    }
   };
 
   // Listen to auth state
@@ -1130,6 +1186,27 @@ export default function App() {
 
   const fetchUserData = async (uid: string) => {
     try {
+      // Fetch user profile
+      const userDocRef = doc(db, 'users', uid);
+      const userSnap = await getDoc(userDocRef).catch(err => {
+        handleFirestoreError(err, OperationType.GET, `users/${uid}`);
+        throw err;
+      });
+      if (userSnap && userSnap.exists()) {
+        const userData = userSnap.data();
+        const profile = {
+          name: userData.name || 'User',
+          phone: userData.phone || '',
+          email: userData.email || '',
+          avatar: userData.avatar || `https://picsum.photos/seed/${uid}/200/200`
+        };
+        setUser(profile);
+        setEditUserName(profile.name);
+        setEditUserPhone(profile.phone);
+        setEditUserEmail(profile.email);
+        setEditUserAvatar(profile.avatar);
+      }
+
       // Fetch requests
       const reqQuery = query(collection(db, 'requests'), where('uid', '==', uid));
       const reqSnap = await getDocs(reqQuery).catch(err => {
@@ -1162,6 +1239,77 @@ export default function App() {
     } catch (error) {
       console.error('Error fetching user data from Firestore:', error);
     }
+  };
+
+  const fetchActiveSearchingRequests = async () => {
+    try {
+      if (!currentUser) return;
+      // Get all requests
+      const reqQuery = query(collection(db, 'requests'));
+      const reqSnap = await getDocs(reqQuery);
+      if (reqSnap) {
+        const activeReqs: Request[] = [];
+        reqSnap.forEach(docSnap => {
+          activeReqs.push(docSnap.data() as Request);
+        });
+        // Merge them into requests state safely, avoiding duplicates by id
+        setRequests(prev => {
+          const prevMap = new Map(prev.map(r => [r.id, r]));
+          activeReqs.forEach(r => prevMap.set(r.id, r));
+          return Array.from(prevMap.values()).sort((a,b) => b.timestamp - a.timestamp);
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching active searching requests:', error);
+    }
+  };
+
+  const handleTransferRequest = async (requestId: string, providerName: string, providerPhone: string) => {
+    const updated = requests.map(r => {
+      if (r.id === requestId) {
+        return {
+          ...r,
+          status: 'completed' as const,
+          notes: r.notes ? `${r.notes}\n\n[Transferred to provider: ${providerName} (${providerPhone})]` : `[Transferred to provider: ${providerName} (${providerPhone})]`
+        };
+      }
+      return r;
+    });
+    setRequests(updated);
+
+    if (currentUser) {
+      try {
+        await updateDoc(doc(db, 'requests', requestId), {
+          status: 'completed',
+          notes: `[Transferred to provider: ${providerName} (${providerPhone})]`
+        }).catch(err => {
+          handleFirestoreError(err, OperationType.UPDATE, `requests/${requestId}`);
+        });
+      } catch (error) {
+        console.error('Failed to transfer request in Firestore:', error);
+      }
+    }
+    notify.success(`Booking successfully transferred to ${providerName}!`, 'provider');
+    setTransferringRequestId(null);
+  };
+
+  const handleTransferSimulatedJob = (jobId: string, providerName: string, providerPhone: string) => {
+    setProviderSimulatedJobs(prev => prev.filter(job => job.id !== jobId));
+    setProviderSimulatedHistory(prev => [
+      {
+        id: `transferred-${jobId}-${Date.now()}`,
+        clientName: providerSimulatedJobs.find(j => j.id === jobId)?.clientName || 'Client',
+        serviceId: providerSimulatedJobs.find(j => j.id === jobId)?.serviceId || 'towing',
+        location: providerSimulatedJobs.find(j => j.id === jobId)?.location || 'Tanzania',
+        date: 'Just Now',
+        payout: 0,
+        status: 'transferred',
+        review: `Transferred to provider: ${providerName} (${providerPhone})`
+      },
+      ...prev
+    ]);
+    notify.success(`Incident successfully transferred to ${providerName}!`, 'provider');
+    setTransferringJobId(null);
   };
 
   // Save requests offline fallback to localStorage
@@ -1465,6 +1613,82 @@ export default function App() {
     setShowAddVehicle(false);
   };
 
+  const handleRemoveVehicle = async (vehicleId: string) => {
+    const updatedVehicles = vehicles.filter(v => v.id !== vehicleId);
+    setVehicles(updatedVehicles);
+
+    if (currentUser) {
+      try {
+        await deleteDoc(doc(db, 'vehicles', vehicleId)).catch(err => {
+          handleFirestoreError(err, OperationType.DELETE, `vehicles/${vehicleId}`);
+          throw err;
+        });
+        notify.success('Vehicle removed from cloud!', 'user');
+      } catch (error) {
+        console.error('Failed to delete vehicle from Firestore', error);
+        notify.error('Failed to remove vehicle from cloud.', 'user');
+      }
+    } else {
+      notify.success('Vehicle removed (Guest Mode)!', 'user');
+    }
+  };
+
+  const triggerFirstTimeSetup = async () => {
+    setVehicles([]);
+    setRequests([]);
+    
+    const emptyUser = {
+      name: 'My Profile',
+      phone: '',
+      email: currentUser?.email || '',
+      avatar: 'https://picsum.photos/seed/newuser/200/200'
+    };
+    setUser(emptyUser);
+    setEditUserName('');
+    setEditUserPhone('');
+    setEditUserEmail(currentUser?.email || '');
+    setEditUserAvatar('https://picsum.photos/seed/newuser/200/200');
+    
+    if (currentUser) {
+      try {
+        const batchPromises: Promise<any>[] = [];
+        
+        const vehQuery = query(collection(db, 'vehicles'), where('uid', '==', currentUser.uid));
+        const vehSnap = await getDocs(vehQuery);
+        vehSnap.forEach(docSnap => {
+          batchPromises.push(deleteDoc(doc(db, 'vehicles', docSnap.id)));
+        });
+        
+        const reqQuery = query(collection(db, 'requests'), where('uid', '==', currentUser.uid));
+        const reqSnap = await getDocs(reqQuery);
+        reqSnap.forEach(docSnap => {
+          batchPromises.push(deleteDoc(doc(db, 'requests', docSnap.id)));
+        });
+
+        batchPromises.push(setDoc(doc(db, 'users', currentUser.uid), {
+          ...emptyUser,
+          uid: currentUser.uid,
+          role: 'user',
+          updatedAt: Date.now()
+        }));
+        
+        await Promise.all(batchPromises);
+        notify.success('Cloud profile and vehicles reset successfully!', 'user');
+      } catch (error) {
+        console.error("Firestore reset failed:", error);
+        notify.error('Could not completely clear cloud data, resetting local view.', 'user');
+      }
+    } else {
+      localStorage.removeItem('viyeko_requests');
+      localStorage.setItem('viyeko_user_profile', JSON.stringify(emptyUser));
+      notify.success('Local profile and vehicles reset successfully!', 'user');
+    }
+    
+    setActiveTab('profile');
+    setIsEditingUser(true);
+    setShowAddVehicle(true);
+  };
+
   const getCurrentLocation = () => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
@@ -1593,16 +1817,18 @@ export default function App() {
             <Navigation size={20} />
             Home
           </button>
-          <button 
-            onClick={() => setActiveTab('care')}
-            className={cn(
-              "flex items-center gap-3 p-4 rounded-2xl transition-all font-bold uppercase tracking-widest text-xs",
-              activeTab === 'care' ? "bg-slate-yellow text-charcoal shadow-lg shadow-slate-yellow/20" : "text-slate-400 hover:bg-charcoal-light/40 border border-transparent hover:border-border-theme"
-            )}
-          >
-            <Sparkles size={20} />
-            Care Unit
-          </button>
+          {!isProviderMode && (
+            <button 
+              onClick={() => setActiveTab('care')}
+              className={cn(
+                "flex items-center gap-3 p-4 rounded-2xl transition-all font-bold uppercase tracking-widest text-xs",
+                activeTab === 'care' ? "bg-slate-yellow text-charcoal shadow-lg shadow-slate-yellow/20" : "text-slate-400 hover:bg-charcoal-light/40 border border-transparent hover:border-border-theme"
+              )}
+            >
+              <Sparkles size={20} />
+              Care Unit
+            </button>
+          )}
           <button 
             onClick={() => setActiveTab('history')}
             className={cn(
@@ -1700,182 +1926,49 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Live incoming sections */}
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between">
+                {/* Unified Live Dispatches and Care Bookings Panel */}
+                <div className="space-y-4 pt-2">
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
                     <div>
-                      <h2 className="text-xl font-black text-slate-100 italic tracking-tight uppercase">Active Customer Jobs</h2>
-                      <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">From app users in Tanzania</p>
+                      <h2 className="text-xl font-black text-slate-100 italic tracking-tight uppercase">
+                        {providerHomeSubTab === 'emergencies' ? 'Emergency Dispatch Calls' : 'Care Unit & Service Bookings'}
+                      </h2>
+                      <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest leading-none">
+                        {providerHomeSubTab === 'emergencies' 
+                          ? 'GPS dispatched emergencies near your current location' 
+                          : 'Customer appointments and mobile valet bookings'}
+                      </p>
                     </div>
-                    <div className="flex items-center gap-1.5 px-2 py-1 bg-viyeko-red/10 border border-viyeko-red/30 rounded-lg text-viyeko-red text-[8px] font-black uppercase tracking-widest">
-                      <span className="w-1.5 h-1.5 rounded-full bg-viyeko-red animate-ping" />
-                      Live Feed
+                    
+                    <div className="flex bg-charcoal-light/60 p-1 rounded-2xl border border-white/5 shrink-0 self-stretch md:self-auto">
+                      <button
+                        onClick={() => setProviderHomeSubTab('emergencies')}
+                        className={cn(
+                          "flex-1 md:flex-none px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5",
+                          providerHomeSubTab === 'emergencies' 
+                            ? "bg-slate-yellow text-charcoal font-black shadow-md shadow-slate-yellow/10" 
+                            : "text-slate-400 hover:text-slate-200"
+                        )}
+                      >
+                        <Zap size={11} />
+                        Emergencies ({providerSimulatedJobs.length})
+                      </button>
+                      <button
+                        onClick={() => {
+                          setProviderHomeSubTab('bookings');
+                          fetchActiveSearchingRequests();
+                        }}
+                        className={cn(
+                          "flex-1 md:flex-none px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5",
+                          providerHomeSubTab === 'bookings' 
+                            ? "bg-slate-yellow text-charcoal font-black shadow-md shadow-slate-yellow/10" 
+                            : "text-slate-400 hover:text-slate-200"
+                        )}
+                      >
+                        <Calendar size={11} />
+                        Bookings ({requests.filter(r => r.status !== 'completed').length})
+                      </button>
                     </div>
-                  </div>
-                </div>
-
-                {/* Real User requests */}
-                {requests.filter(r => r.status !== 'completed').length === 0 ? (
-                  <div className="bg-charcoal-light/10 border border-white/5 rounded-3xl py-8 text-center text-slate-500 text-xs">
-                    No active direct requests from users at the moment.
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {requests.filter(r => r.status !== 'completed').map((req) => {
-                      const service = SERVICES.find(s => s.id === req.serviceId);
-                      return (
-                        <div key={req.id} className="glass-card p-4 space-y-4 border-l-4 border-l-viyeko-red animate-fadeIn">
-                          <div className="flex justify-between items-start">
-                            <div className="flex items-center gap-3">
-                              <div className={cn("p-2 rounded-xl text-white", service?.color)}>
-                                {service && <service.icon size={16} />}
-                              </div>
-                              <div>
-                                <h4 className="font-extrabold text-slate-100 text-sm leading-tight">{service?.title}</h4>
-                                <p className="text-[9px] text-slate-500 font-bold">{format(req.timestamp, 'MMM d, h:mm a')}</p>
-                              </div>
-                            </div>
-                            <div className="bg-viyeko-red/20 text-viyeko-red border border-viyeko-red/30 px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider">
-                              {req.status}
-                            </div>
-                          </div>
-                          
-                          <div className="space-y-2 text-xs">
-                            <div className="flex items-center gap-2 text-slate-300">
-                              <MapPin size={12} className="text-slate-yellow shrink-0" />
-                              <span className="font-medium truncate">{req.location.address}</span>
-                            </div>
-                            <div className="flex items-center gap-2 text-slate-300">
-                              <Car size={12} className="text-slate-yellow shrink-0" />
-                              <span>{req.vehicleInfo}</span>
-                            </div>
-                            {req.addOnIds && req.addOnIds.length > 0 && (
-                              <div className="flex flex-wrap gap-1 pt-1">
-                                {req.addOnIds.map(id => (
-                                  <span key={id} className="bg-charcoal-light text-[8px] px-2 py-0.5 rounded text-slate-400 border border-white/5 font-bold uppercase">
-                                    +{SERVICES.find(s => s.id === id)?.title}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-
-                            {/* Bidding setup for real requests */}
-                            {(() => {
-                              const pricing = customPrices[req.id] || { base: service?.price || 399, distance: 120, materials: 0 };
-                              const currentCombined = pricing.base + pricing.distance + pricing.materials;
-                              return (
-                                <div className="bg-charcoal-light/30 border border-border-theme rounded-2xl p-3 space-y-3 mt-3">
-                                  <p className="text-[9px] font-black uppercase text-slate-yellow tracking-widest flex items-center gap-1.5">
-                                    <Wrench size={12} className="text-slate-yellow animate-pulse" />
-                                    Dynamic Bidding & Quotes
-                                  </p>
-                                  <div className="space-y-1.5">
-                                    <div className="flex justify-between items-center text-[10px]">
-                                      <span className="text-slate-400 font-bold uppercase text-[8px] tracking-wide">Distance / Travel Premium</span>
-                                      <span className="text-slate-yellow font-bold font-mono">TSh {(pricing.distance * 100).toLocaleString()}</span>
-                                    </div>
-                                    <input 
-                                      type="range"
-                                      min="20"
-                                      max="1205"
-                                      step="20"
-                                      value={pricing.distance}
-                                      onChange={(e) => {
-                                        const nextDist = Number(e.target.value);
-                                        setCustomPrices(prev => ({
-                                          ...prev,
-                                          [req.id]: {
-                                            base: pricing.base,
-                                            materials: pricing.materials,
-                                            distance: nextDist
-                                          }
-                                        }));
-                                      }}
-                                      className="w-full h-1 bg-charcoal-light rounded-lg accent-slate-yellow cursor-pointer"
-                                    />
-                                  </div>
-                                  <div className="space-y-1.5">
-                                    <div className="flex justify-between items-center text-[10px]">
-                                      <span className="text-slate-400 font-bold uppercase text-[8px] tracking-wide">Material / Tire Surcharge</span>
-                                      <span className="text-slate-yellow font-bold font-mono">TSh {(pricing.materials * 100).toLocaleString()}</span>
-                                    </div>
-                                    <input 
-                                      type="range"
-                                      min="0"
-                                      max="2005"
-                                      step="50"
-                                      value={pricing.materials}
-                                      onChange={(e) => {
-                                        const nextMat = Number(e.target.value);
-                                        setCustomPrices(prev => ({
-                                          ...prev,
-                                          [req.id]: {
-                                            base: pricing.base,
-                                            distance: pricing.distance,
-                                            materials: nextMat
-                                          }
-                                        }));
-                                      }}
-                                      className="w-full h-1 bg-charcoal-light rounded-lg accent-slate-yellow cursor-pointer"
-                                    />
-                                  </div>
-                                  <div className="flex justify-between items-center pt-2 border-t border-border-theme text-[10px]">
-                                    <span className="font-bold text-slate-500 uppercase tracking-widest text-[8px]">Base Estimation</span>
-                                    <span className="font-bold text-slate-300">TSh {(pricing.base * 100).toLocaleString()}</span>
-                                  </div>
-                                  <div className="flex justify-between items-center">
-                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Payout Proposed</span>
-                                    <span className="text-sm font-black text-slate-yellow font-mono">TSh {(currentCombined * 100).toLocaleString()}</span>
-                                  </div>
-                                  <button
-                                    onClick={() => handleSetCustomQuote(req.id, pricing)}
-                                    className="w-full bg-charcoal-light border border-border-theme text-slate-100 hover:text-slate-yellow hover:border-slate-yellow/40 py-2 rounded-xl text-[9px] font-black uppercase tracking-wider hover:brightness-110 active:scale-95 transition-all"
-                                  >
-                                    Submit Modified Pricing
-                                  </button>
-                                </div>
-                              );
-                            })()}
-                          </div>
-
-                          <div className="flex gap-2 pt-1">
-                            {req.status === 'searching' && (
-                              <button 
-                                onClick={() => handleAcceptJob(req.id, req.estimatedArrival)}
-                                className="flex-1 bg-slate-yellow text-charcoal py-2.5 rounded-xl text-xs font-black uppercase tracking-wide hover:brightness-110 transition-all flex items-center justify-center gap-1"
-                              >
-                                Accept Direct Request
-                              </button>
-                            )}
-                            {req.status === 'on-the-way' && (
-                              <button 
-                                onClick={() => handleAcceptJob(req.id, req.estimatedArrival)}
-                                className="flex-1 bg-amber-500 text-white py-2.5 rounded-xl text-xs font-black uppercase tracking-wide hover:bg-amber-600 transition-all"
-                              >
-                                Mark as Arrived
-                              </button>
-                            )}
-                            {req.status === 'arrived' && (
-                              <button 
-                                onClick={() => handleMarkDone(req.id)}
-                                className="flex-1 bg-emerald-500 text-white py-2.5 rounded-xl text-xs font-black uppercase tracking-wide hover:bg-emerald-600 transition-all flex items-center justify-center gap-1.5"
-                              >
-                                <CheckCircle2 size={14} />
-                                <span>Complete Rescue</span>
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* Interactive Dispatch Jobs (Nearby Dispatch Simulation) */}
-                <div className="space-y-3 pt-4">
-                  <div>
-                    <h2 className="text-xl font-black text-slate-100 italic tracking-tight uppercase">ACTIVE DISPATCH CALLS</h2>
-                    <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">GPS dispatched emergencies near your current location</p>
                   </div>
 
                   {!providerAccount.isOnline ? (
@@ -1886,7 +1979,7 @@ export default function App() {
                       <div className="space-y-1.5">
                         <h3 className="font-extrabold text-slate-100 tracking-tight text-sm uppercase">Currently Offline</h3>
                         <p className="text-slate-400 text-xs max-w-sm mx-auto leading-relaxed">
-                          You are currently offline. Toggle online to start receiving live GPS-dispatched emergency calls from stranded drivers near you.
+                          You are currently offline. Toggle online to start receiving live GPS-dispatched emergency calls and service appointments near you.
                         </p>
                       </div>
                       <button
@@ -1900,206 +1993,395 @@ export default function App() {
                         ⚡ Go Online Now
                       </button>
                     </div>
-                  ) : providerSimulatedJobs.length === 0 ? (
-                    <div className="bg-charcoal-light/10 border border-white/5 rounded-3xl py-12 text-center space-y-4">
-                      <Award size={32} className="mx-auto text-slate-yellow animate-bounce" />
-                      <p className="text-slate-400 font-bold uppercase text-[10px] tracking-wider">All nearby active dispatch emergencies resolved or transferred!</p>
-                      <button 
-                        onClick={() => {
-                          setProviderSimulatedJobs([
-                            { 
-                              id: 'sim-1', 
-                              clientName: 'Devota Shayo', 
-                              serviceId: 'flat_tire', 
-                              location: 'Oysterbay, Dar es Salaam', 
-                              vehicle: 'Toyota RAV4 (T 412 DGB)', 
-                              customBasePrice: 750,
-                              distancePrice: 150,
-                              materialsPrice: 50,
-                              notes: 'Stuck near Palm Beach Hotel. Flat left front tire.', 
-                              status: 'available',
-                              distance: '1.2 km',
-                              eta: '10 mins',
-                              expiresInSeconds: 30
-                            },
-                            { 
-                              id: 'sim-2', 
-                              clientName: 'Joseph Temu', 
-                              serviceId: 'towing', 
-                              location: 'Kinondoni, Dar es Salaam', 
-                              vehicle: 'Mercedes Benz C200 (T 980 CAS)', 
-                              customBasePrice: 1800,
-                              distancePrice: 200,
-                              materialsPrice: 100,
-                              notes: 'Engine overheating, white smoke from hood. Stranded on Ali Hassan Mwinyi Rd.', 
-                              status: 'available',
-                              distance: '3.4 km',
-                              eta: '15 mins',
-                              expiresInSeconds: 45
-                            },
-                            { 
-                              id: 'sim-3', 
-                              clientName: 'Michael John', 
-                              serviceId: 'battery', 
-                              location: 'Upanga, Dar es Salaam', 
-                              vehicle: 'Ford Ranger (T 552 DDX)', 
-                              customBasePrice: 450,
-                              distancePrice: 120,
-                              materialsPrice: 30,
-                              notes: 'Battery dead, needs a jumpstart or terminal cleaning. Near Muhimbili.', 
-                              status: 'available',
-                              distance: '2.1 km',
-                              eta: '8 mins',
-                              expiresInSeconds: 60
-                            }
-                          ]);
-                          notify.success('Incidents list reset successfully!', 'provider');
-                        }}
-                        className="bg-slate-yellow text-charcoal px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-wider mx-auto block"
-                      >
-                        Scan For Active Emergencies
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {providerSimulatedJobs.map(job => {
-                        const service = SERVICES.find(s => s.id === job.serviceId);
-                        const totalPayout = job.customBasePrice + job.distancePrice + job.materialsPrice;
-                        return (
-                          <div 
-                            key={job.id} 
-                            className={cn(
-                              "glass-card p-4 space-y-4 border-l-4 transition-all relative overflow-hidden",
-                              job.status === 'available' ? "border-l-slate-yellow" :
-                              job.status === 'on-the-way' ? "border-l-amber-500 bg-amber-500/5" :
-                              "border-l-emerald-500 bg-emerald-500/5 animate-pulse"
-                            )}
-                          >
-                            <div className="flex justify-between items-start">
-                              <div>
-                                <div className="flex items-center gap-2 mb-1">
-                                  <span className="text-[8px] font-black uppercase tracking-wider bg-charcoal-light py-0.5 px-2 rounded border border-white/5 text-slate-yellow">
-                                    Direct App Booking
-                                  </span>
-                                  <span className="text-[10px] text-slate-500 font-bold uppercase">
-                                    🗺️ {job.distance}
-                                  </span>
-                                  {job.status === 'available' && job.expiresInSeconds !== undefined && (
-                                    <span className="text-[9px] bg-red-500/10 text-red-500 px-2 py-0.5 rounded-full font-bold animate-pulse">
-                                      ⚠️ Transferring: {job.expiresInSeconds}s
+                  ) : providerHomeSubTab === 'emergencies' ? (
+                    /* EMERGENCIES SUB-TAB CONTENT */
+                    providerSimulatedJobs.length === 0 ? (
+                      <div className="bg-charcoal-light/10 border border-white/5 rounded-3xl py-12 text-center space-y-4">
+                        <Award size={32} className="mx-auto text-slate-yellow animate-bounce" />
+                        <p className="text-slate-400 font-bold uppercase text-[10px] tracking-wider">All nearby active dispatch emergencies resolved or transferred!</p>
+                        <button 
+                          onClick={() => {
+                            setProviderSimulatedJobs([
+                              { 
+                                id: 'sim-1', 
+                                clientName: 'Devota Shayo', 
+                                serviceId: 'flat_tire', 
+                                location: 'Oysterbay, Dar es Salaam', 
+                                vehicle: 'Toyota RAV4 (T 412 DGB)', 
+                                customBasePrice: 750,
+                                distancePrice: 150,
+                                materialsPrice: 50,
+                                notes: 'Stuck near Palm Beach Hotel. Flat left front tire.', 
+                                status: 'available',
+                                distance: '1.2 km',
+                                eta: '10 mins',
+                                expiresInSeconds: 30
+                              },
+                              { 
+                                id: 'sim-2', 
+                                clientName: 'Joseph Temu', 
+                                serviceId: 'towing', 
+                                location: 'Kinondoni, Dar es Salaam', 
+                                vehicle: 'Mercedes Benz C200 (T 980 CAS)', 
+                                customBasePrice: 1800,
+                                distancePrice: 200,
+                                materialsPrice: 100,
+                                notes: 'Engine overheating, white smoke from hood. Stranded on Ali Hassan Mwinyi Rd.', 
+                                status: 'available',
+                                distance: '3.4 km',
+                                eta: '15 mins',
+                                expiresInSeconds: 45
+                              },
+                              { 
+                                id: 'sim-3', 
+                                clientName: 'Michael John', 
+                                serviceId: 'battery', 
+                                location: 'Upanga, Dar es Salaam', 
+                                vehicle: 'Ford Ranger (T 552 DDX)', 
+                                customBasePrice: 450,
+                                distancePrice: 120,
+                                materialsPrice: 30,
+                                notes: 'Battery dead, needs a jumpstart or terminal cleaning. Near Muhimbili.', 
+                                status: 'available',
+                                distance: '2.1 km',
+                                eta: '8 mins',
+                                expiresInSeconds: 60
+                              }
+                            ]);
+                            notify.success('Incidents list reset successfully!', 'provider');
+                          }}
+                          className="bg-slate-yellow text-charcoal px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-wider mx-auto block"
+                        >
+                          Scan For Active Emergencies
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {providerSimulatedJobs.map(job => {
+                          const service = SERVICES.find(s => s.id === job.serviceId);
+                          const totalPayout = job.customBasePrice + job.distancePrice + job.materialsPrice;
+                          return (
+                            <div 
+                              key={job.id} 
+                              className={cn(
+                                "glass-card p-4 space-y-4 border-l-4 transition-all relative overflow-hidden",
+                                job.status === 'available' ? "border-l-slate-yellow" :
+                                job.status === 'on-the-way' ? "border-l-amber-500 bg-amber-500/5" :
+                                "border-l-emerald-500 bg-emerald-500/5 animate-pulse"
+                              )}
+                            >
+                              <div className="flex justify-between items-start">
+                                <div>
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span className="text-[8px] font-black uppercase tracking-wider bg-charcoal-light py-0.5 px-2 rounded border border-white/5 text-slate-yellow flex items-center gap-1">
+                                      <Zap size={8} /> Emergency GPS Dispatch
                                     </span>
-                                  )}
-                                </div>
-                                <h3 className="font-extrabold text-slate-100 text-sm leading-none flex items-center gap-2">
-                                  {job.clientName}
-                                </h3>
-                              </div>
-                              <div className={cn(
-                                "px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest border",
-                                job.status === 'available' ? "bg-slate-yellow/10 text-slate-yellow border-slate-yellow/30" :
-                                job.status === 'on-the-way' ? "bg-amber-400/10 text-amber-400 border-amber-400/30" :
-                                "bg-emerald-400/10 text-emerald-400 border-emerald-400/30"
-                              )}>
-                                {job.status === 'available' ? 'Incoming Dispatch' : job.status}
-                              </div>
-                            </div>
-
-                            <div className="flex items-start gap-3">
-                              <div className={cn("p-2 rounded-xl text-white shrink-0 shadow-lg", service?.color)}>
-                                {service && <service.icon size={16} />}
-                              </div>
-                              <div className="space-y-1.5 text-xs flex-1">
-                                <p className="font-extrabold text-slate-200">{service?.title}</p>
-                                <p className="text-[10px] font-bold text-slate-400">{job.vehicle}</p>
-                                <p className="text-[11px] text-slate-300 italic">"{job.notes}"</p>
-                                <div className="flex items-center gap-2 text-slate-400 pt-1 text-[11px]">
-                                  <MapPin size={12} className="text-slate-yellow shrink-0" />
-                                  <span>{job.location}</span>
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Bidding Control Panel */}
-                            {job.status === 'available' && (
-                              <div className="bg-charcoal-light/30 border border-border-theme rounded-2xl p-3 space-y-3">
-                                <div className="flex items-center justify-between">
-                                  <span className="text-[8px] font-black uppercase tracking-wider text-slate-yellow">Customize Surcharges (Bidding)</span>
-                                  <span className="text-[9px] font-mono font-bold text-slate-400">Base Unit: {job.customBasePrice}</span>
-                                </div>
-                                
-                                <div className="space-y-1.5">
-                                  <div className="flex justify-between items-center text-[10px]">
-                                    <span className="text-[8px] font-bold uppercase text-slate-500">Travel Distance Premium</span>
-                                    <span className="text-slate-yellow font-bold font-mono">TSh {(job.distancePrice * 100).toLocaleString()}</span>
+                                    <span className="text-[10px] text-slate-500 font-bold uppercase">
+                                      🗺️ {job.distance}
+                                    </span>
+                                    {job.status === 'available' && job.expiresInSeconds !== undefined && (
+                                      <span className="text-[9px] bg-red-500/10 text-red-400 px-2 py-0.5 rounded-full font-bold animate-pulse">
+                                        ⚠️ Auto-Transfer in: {job.expiresInSeconds}s
+                                      </span>
+                                    )}
                                   </div>
-                                  <input 
-                                    type="range"
-                                    min="50"
-                                    max="500"
-                                    step="10"
-                                    value={job.distancePrice}
-                                    onChange={(e) => handleAdjustSimPrice(job.id, 'distancePrice', Number(e.target.value))}
-                                    className="w-full h-1 bg-charcoal-light rounded-lg accent-slate-yellow cursor-pointer"
-                                  />
+                                  <h3 className="font-extrabold text-slate-100 text-sm leading-none flex items-center gap-2">
+                                    {job.clientName}
+                                  </h3>
                                 </div>
-
-                                <div className="space-y-1.5">
-                                  <div className="flex justify-between items-center text-[10px]">
-                                    <span className="text-[8px] font-bold uppercase text-slate-500">Fluctuation & Equipment Premium</span>
-                                    <span className="text-slate-yellow font-bold font-mono">TSh {(job.materialsPrice * 100).toLocaleString()}</span>
-                                  </div>
-                                  <input 
-                                    type="range"
-                                    min="0"
-                                    max="800"
-                                    step="20"
-                                    value={job.materialsPrice}
-                                    onChange={(e) => handleAdjustSimPrice(job.id, 'materialsPrice', Number(e.target.value))}
-                                    className="w-full h-1 bg-charcoal-light rounded-lg accent-slate-yellow cursor-pointer"
-                                  />
+                                <div className={cn(
+                                  "px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest border",
+                                  job.status === 'available' ? "bg-slate-yellow/10 text-slate-yellow border-slate-yellow/30" :
+                                  job.status === 'on-the-way' ? "bg-amber-400/10 text-amber-400 border-amber-400/30" :
+                                  "bg-emerald-400/10 text-emerald-400 border-emerald-400/30"
+                                )}>
+                                  {job.status === 'available' ? 'Incoming' : job.status}
                                 </div>
                               </div>
-                            )}
 
-                            <div className="flex justify-between items-center pt-2 border-t border-white/5">
-                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Estimated Payout</span>
-                              <span className="text-sm font-black text-slate-yellow font-mono">TSh {(totalPayout * 100).toLocaleString()}</span>
-                            </div>
+                              <div className="flex items-start gap-3">
+                                <div className={cn("p-2 rounded-xl text-white shrink-0 shadow-lg", service?.color || 'bg-slate-700')}>
+                                  {service ? <service.icon size={16} /> : <Wrench size={16} />}
+                                </div>
+                                <div className="space-y-1.5 text-xs flex-1">
+                                  <p className="font-extrabold text-slate-200">{service?.title || 'Emergency Help'}</p>
+                                  <p className="text-[10px] font-bold text-slate-400">{job.vehicle}</p>
+                                  <p className="text-[11px] text-slate-300 italic">"{job.notes}"</p>
+                                  <div className="flex items-center gap-2 text-slate-400 pt-1 text-[11px]">
+                                    <MapPin size={12} className="text-slate-yellow shrink-0" />
+                                    <span>{job.location}</span>
+                                  </div>
+                                </div>
+                              </div>
 
-                            {/* Simulated Flow Actions */}
-                            <div className="pt-2 flex gap-2">
+                              {/* Surcharges / Bidding Setup */}
                               {job.status === 'available' && (
-                                <button
-                                  onClick={() => handleAcceptSimulatedJob(job.id)}
-                                  className="w-full bg-slate-yellow text-charcoal py-2.5 rounded-xl text-xs font-black uppercase tracking-wider hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-1.5"
-                                >
-                                  <Zap size={14} />
-                                  Accept & Drive Now
-                                </button>
+                                <div className="bg-charcoal-light/30 border border-white/5 rounded-2xl p-3 space-y-3">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-[8px] font-black uppercase tracking-wider text-slate-yellow">Customize Surcharges (Bidding)</span>
+                                    <span className="text-[9px] font-mono font-bold text-slate-400">Base Unit: {job.customBasePrice}</span>
+                                  </div>
+                                  
+                                  <div className="space-y-1.5">
+                                    <div className="flex justify-between items-center text-[10px]">
+                                      <span className="text-[8px] font-bold uppercase text-slate-500">Travel Distance Premium</span>
+                                      <span className="text-slate-yellow font-bold font-mono">TSh {(job.distancePrice * 100).toLocaleString()}</span>
+                                    </div>
+                                    <input 
+                                      type="range"
+                                      min="50"
+                                      max="500"
+                                      step="10"
+                                      value={job.distancePrice}
+                                      onChange={(e) => handleAdjustSimPrice(job.id, 'distancePrice', Number(e.target.value))}
+                                      className="w-full h-1 bg-charcoal-light rounded-lg accent-slate-yellow cursor-pointer"
+                                    />
+                                  </div>
+
+                                  <div className="space-y-1.5">
+                                    <div className="flex justify-between items-center text-[10px]">
+                                      <span className="text-[8px] font-bold uppercase text-slate-500">Fluctuation & Equipment Premium</span>
+                                      <span className="text-slate-yellow font-bold font-mono">TSh {(job.materialsPrice * 100).toLocaleString()}</span>
+                                    </div>
+                                    <input 
+                                      type="range"
+                                      min="0"
+                                      max="800"
+                                      step="20"
+                                      value={job.materialsPrice}
+                                      onChange={(e) => handleAdjustSimPrice(job.id, 'materialsPrice', Number(e.target.value))}
+                                      className="w-full h-1 bg-charcoal-light rounded-lg accent-slate-yellow cursor-pointer"
+                                    />
+                                  </div>
+                                </div>
                               )}
-                              {job.status === 'on-the-way' && (
-                                <button
-                                  onClick={() => handleAdvanceSimulatedJob(job.id)}
-                                  className="w-full bg-amber-500 text-white py-2.5 rounded-xl text-xs font-black uppercase tracking-wider hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-1.5"
-                                >
-                                  <Clock size={14} className="animate-spin" />
-                                  Arrive at Destination
-                                </button>
-                              )}
-                              {job.status === 'arrived' && (
-                                <button
-                                  onClick={() => handleAdvanceSimulatedJob(job.id)}
-                                  className="w-full bg-emerald-500 text-white py-2.5 rounded-xl text-xs font-black uppercase tracking-wider hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-1.5"
-                                >
-                                  <CheckCircle2 size={14} className="animate-pulse" />
-                                  Complete Assistance
-                                </button>
-                              )}
+
+                              <div className="flex justify-between items-center pt-2 border-t border-white/5">
+                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Estimated Payout</span>
+                                <span className="text-sm font-black text-slate-yellow font-mono">TSh {(totalPayout * 100).toLocaleString()}</span>
+                              </div>
+
+                              <div className="pt-2 flex flex-col gap-2">
+                                <div className="flex gap-2">
+                                  {job.status === 'available' && (
+                                    <button
+                                      onClick={() => handleAcceptSimulatedJob(job.id)}
+                                      className="flex-1 bg-slate-yellow text-charcoal py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-1.5"
+                                    >
+                                      <Zap size={12} />
+                                      Accept & Drive Now
+                                    </button>
+                                  )}
+                                  {job.status === 'on-the-way' && (
+                                    <button
+                                      onClick={() => handleAdvanceSimulatedJob(job.id)}
+                                      className="flex-1 bg-amber-500 text-white py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-1.5"
+                                    >
+                                      <Clock size={12} className="animate-spin" />
+                                      Arrived at Destination
+                                    </button>
+                                  )}
+                                  {job.status === 'arrived' && (
+                                    <button
+                                      onClick={() => handleAdvanceSimulatedJob(job.id)}
+                                      className="flex-1 bg-emerald-500 text-white py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-1.5"
+                                    >
+                                      <CheckCircle2 size={12} className="animate-pulse" />
+                                      Complete Assistance
+                                    </button>
+                                  )}
+
+                                  {/* Opt to Transfer simulated job */}
+                                  <button
+                                    onClick={() => setTransferringJobId(job.id)}
+                                    className="flex-1 bg-white/5 border border-white/10 hover:bg-white/10 text-slate-300 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider active:scale-95 transition-all flex items-center justify-center gap-1"
+                                  >
+                                    <CornerUpRight size={12} />
+                                    Transfer Dispatch
+                                  </button>
+                                </div>
+
+                                <div className="flex gap-2">
+                                  <a
+                                    href="tel:+255750057757"
+                                    className="flex-1 bg-charcoal border border-white/10 text-slate-400 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-charcoal-light transition-all text-center flex items-center justify-center gap-1"
+                                  >
+                                    <Phone size={11} />
+                                    Call Godson
+                                  </a>
+                                  <a
+                                    href="tel:+255747746619"
+                                    className="flex-1 bg-charcoal border border-white/10 text-slate-400 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-charcoal-light transition-all text-center flex items-center justify-center gap-1"
+                                  >
+                                    <Phone size={11} />
+                                    Call Francis
+                                  </a>
+                                </div>
+                              </div>
                             </div>
-                          </div>
-                        );
-                      })}
-                    </div>
+                          );
+                        })}
+                      </div>
+                    )
+                  ) : (
+                    /* CARE UNIT BOOKINGS SUB-TAB CONTENT */
+                    requests.filter(r => r.status !== 'completed').length === 0 ? (
+                      <div className="bg-charcoal-light/10 border border-white/5 rounded-3xl py-12 text-center space-y-4">
+                        <Calendar size={32} className="mx-auto text-slate-yellow animate-bounce" />
+                        <p className="text-slate-400 font-bold uppercase text-[10px] tracking-wider">No active service appointments or care unit bookings found!</p>
+                        <button 
+                          onClick={() => fetchActiveSearchingRequests()}
+                          className="bg-slate-yellow text-charcoal px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-wider mx-auto block"
+                        >
+                          Check for New Bookings
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {requests.filter(r => r.status !== 'completed').map(req => {
+                          const service = SERVICES.find(s => s.id === req.serviceId);
+                          const isScheduled = req.timestamp > Date.now() + 1000 * 60 * 60;
+                          return (
+                            <div 
+                              key={req.id} 
+                              className={cn(
+                                "glass-card p-4 space-y-4 border-l-4 transition-all relative overflow-hidden",
+                                req.status === 'searching' ? "border-l-slate-yellow" :
+                                req.status === 'assigned' ? "border-l-blue-500 bg-blue-500/[0.02]" :
+                                req.status === 'on-the-way' ? "border-l-amber-500 bg-amber-500/[0.02]" :
+                                "border-l-emerald-500 bg-emerald-500/[0.02]"
+                              )}
+                            >
+                              <div className="flex justify-between items-start">
+                                <div>
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span className="text-[8px] font-black uppercase tracking-wider bg-charcoal-light py-0.5 px-2 rounded border border-white/5 text-slate-yellow flex items-center gap-1">
+                                      <Sparkles size={8} /> Care Booking
+                                    </span>
+                                    {isScheduled && (
+                                      <span className="text-[8px] font-black uppercase tracking-wider bg-purple-500/15 text-purple-400 py-0.5 px-2 rounded">
+                                        📅 Scheduled
+                                      </span>
+                                    )}
+                                    <span className="text-[10px] text-slate-500 font-bold uppercase">
+                                      {new Date(req.timestamp).toLocaleString([], {month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit'})}
+                                    </span>
+                                  </div>
+                                  <h3 className="font-extrabold text-slate-100 text-sm leading-none flex items-center gap-2">
+                                    Customer ({req.vehicleInfo ? req.vehicleInfo.split('(')[0] : 'Guest'})
+                                  </h3>
+                                </div>
+                                <div className={cn(
+                                  "px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest border",
+                                  req.status === 'searching' ? "bg-slate-yellow/10 text-slate-yellow border-slate-yellow/30" :
+                                  req.status === 'assigned' ? "bg-blue-400/10 text-blue-400 border-blue-400/30" :
+                                  req.status === 'on-the-way' ? "bg-amber-400/10 text-amber-400 border-amber-400/30" :
+                                  "bg-emerald-400/10 text-emerald-400 border-emerald-400/30"
+                                )}>
+                                  {req.status}
+                                </div>
+                              </div>
+
+                              <div className="flex items-start gap-3">
+                                <div className={cn("p-2 rounded-xl text-white shrink-0 shadow-lg", service?.color || 'bg-slate-700')}>
+                                  {service ? <service.icon size={16} /> : <Wrench size={16} />}
+                                </div>
+                                <div className="space-y-1.5 text-xs flex-1">
+                                  <p className="font-extrabold text-slate-200">{service?.title || 'Custom Repair Service'}</p>
+                                  <p className="text-[10px] font-bold text-slate-400">Vehicle: {req.vehicleInfo}</p>
+                                  <p className="text-[11px] text-slate-300 italic">"{req.notes}"</p>
+                                  <div className="flex items-center gap-2 text-slate-400 pt-1 text-[11px]">
+                                    <MapPin size={12} className="text-slate-yellow shrink-0" />
+                                    <span>{req.location.address}</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex justify-between items-center pt-2 border-t border-white/5">
+                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Calculated Payout</span>
+                                <span className="text-sm font-black text-slate-yellow font-mono">TSh {(req.totalCost * 100).toLocaleString()}</span>
+                              </div>
+
+                              <div className="pt-2 flex flex-col gap-2">
+                                <div className="flex gap-2">
+                                  {req.status === 'searching' && (
+                                    <button
+                                      onClick={() => handleAcceptJob(req.id, req.estimatedArrival)}
+                                      className="flex-1 bg-slate-yellow text-charcoal py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-1"
+                                    >
+                                      <Check size={12} strokeWidth={3} />
+                                      Confirm Booking
+                                    </button>
+                                  )}
+                                  {req.status === 'assigned' && (
+                                    <button
+                                      onClick={() => advanceStatus(req.id)}
+                                      className="flex-1 bg-amber-500 text-white py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-1"
+                                    >
+                                      <Navigation size={12} />
+                                      Set: On the Way
+                                    </button>
+                                  )}
+                                  {req.status === 'on-the-way' && (
+                                    <button
+                                      onClick={() => advanceStatus(req.id)}
+                                      className="flex-1 bg-emerald-600 text-white py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-1"
+                                    >
+                                      <MapPin size={12} />
+                                      Arrived
+                                    </button>
+                                  )}
+                                  {req.status === 'arrived' && (
+                                    <button
+                                      onClick={() => advanceStatus(req.id)}
+                                      className="flex-1 bg-emerald-500 text-white py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-1"
+                                    >
+                                      <Wrench size={12} />
+                                      Start Service
+                                    </button>
+                                  )}
+                                  {req.status === 'in-progress' && (
+                                    <button
+                                      onClick={() => advanceStatus(req.id)}
+                                      className="flex-1 bg-emerald-500 text-white py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-1"
+                                    >
+                                      <CheckCircle2 size={12} />
+                                      Complete Service
+                                    </button>
+                                  )}
+
+                                  {/* Opt to Transfer care unit booking */}
+                                  <button
+                                    onClick={() => setTransferringRequestId(req.id)}
+                                    className="flex-1 bg-white/5 border border-white/10 hover:bg-white/10 text-slate-300 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider active:scale-95 transition-all flex items-center justify-center gap-1"
+                                  >
+                                    <CornerUpRight size={12} />
+                                    Transfer Booking
+                                  </button>
+                                </div>
+
+                                <div className="flex gap-2">
+                                  <a
+                                    href="tel:+255750057757"
+                                    className="flex-1 bg-charcoal border border-white/10 text-slate-400 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-charcoal-light transition-all text-center flex items-center justify-center gap-1"
+                                  >
+                                    <Phone size={11} />
+                                    Call Godson
+                                  </a>
+                                  <a
+                                    href="tel:+255747746619"
+                                    className="flex-1 bg-charcoal border border-white/10 text-slate-400 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-charcoal-light transition-all text-center flex items-center justify-center gap-1"
+                                  >
+                                    <Phone size={11} />
+                                    Call Francis
+                                  </a>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )
                   )}
                 </div>
               </motion.div>
@@ -2263,34 +2545,143 @@ export default function App() {
                       />
                     </div>
 
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">Full Name</label>
-                      <input 
-                        type="text" 
-                        value={editProviderName} 
-                        onChange={e => setEditProviderName(e.target.value)}
-                        className="w-full bg-charcoal border border-white/10 rounded-xl p-3 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-slate-yellow/50 font-bold"
-                      />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">Full Name</label>
+                        <input 
+                          type="text" 
+                          value={editProviderName} 
+                          onChange={e => setEditProviderName(e.target.value)}
+                          className="w-full bg-charcoal border border-white/10 rounded-xl p-3 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-slate-yellow/50 font-bold"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">Phone Number</label>
+                        <input 
+                          type="text" 
+                          value={editProviderPhone} 
+                          onChange={e => setEditProviderPhone(e.target.value)}
+                          className="w-full bg-charcoal border border-white/10 rounded-xl p-3 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-slate-yellow/50 font-mono font-bold"
+                        />
+                      </div>
                     </div>
 
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">Phone Number</label>
-                      <input 
-                        type="text" 
-                        value={editProviderPhone} 
-                        onChange={e => setEditProviderPhone(e.target.value)}
-                        className="w-full bg-charcoal border border-white/10 rounded-xl p-3 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-slate-yellow/50 font-mono font-bold"
-                      />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">Email Address</label>
+                        <input 
+                          type="email" 
+                          value={editProviderEmail} 
+                          onChange={e => setEditProviderEmail(e.target.value)}
+                          className="w-full bg-charcoal border border-white/10 rounded-xl p-3 text-[11px] text-slate-100 placeholder-slate-600 focus:outline-none focus:border-slate-yellow/50 font-bold"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">Operational Region</label>
+                        <select
+                          value={editProviderRegion}
+                          onChange={e => setEditProviderRegion(e.target.value)}
+                          className="w-full bg-charcoal border border-white/10 rounded-xl p-3 text-xs text-slate-100 focus:outline-none focus:border-slate-yellow/50 font-bold"
+                        >
+                          <option value="Dar es Salaam">Dar es Salaam</option>
+                          <option value="Dodoma">Dodoma</option>
+                          <option value="Arusha">Arusha</option>
+                          <option value="Mwanza">Mwanza</option>
+                          <option value="Morogoro">Morogoro</option>
+                          <option value="Zanzibar">Zanzibar</option>
+                        </select>
+                      </div>
                     </div>
 
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">Email Address</label>
-                      <input 
-                        type="email" 
-                        value={editProviderEmail} 
-                        onChange={e => setEditProviderEmail(e.target.value)}
-                        className="w-full bg-charcoal border border-white/10 rounded-xl p-3 text-[11px] text-slate-100 placeholder-slate-600 focus:outline-none focus:border-slate-yellow/50 font-bold"
-                      />
+                    {/* Operational vehicle specifications */}
+                    <div className="bg-charcoal-light/30 border border-white/5 rounded-2xl p-4 space-y-3">
+                      <span className="text-[10px] font-black uppercase text-slate-yellow tracking-widest flex items-center gap-1">
+                        <Truck size={12} /> Service Vehicle Specifications
+                      </span>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <label className="text-[8px] font-bold text-slate-500 uppercase">Make</label>
+                          <input 
+                            type="text" 
+                            value={editProviderVehicleMake} 
+                            onChange={e => setEditProviderVehicleMake(e.target.value)}
+                            placeholder="e.g. Toyota"
+                            className="w-full bg-charcoal border border-white/10 rounded-lg p-2.5 text-xs text-slate-200 focus:outline-none font-bold"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[8px] font-bold text-slate-500 uppercase">Model</label>
+                          <input 
+                            type="text" 
+                            value={editProviderVehicleModel} 
+                            onChange={e => setEditProviderVehicleModel(e.target.value)}
+                            placeholder="e.g. Hilux Tow Truck"
+                            className="w-full bg-charcoal border border-white/10 rounded-lg p-2.5 text-xs text-slate-200 focus:outline-none font-bold"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[8px] font-bold text-slate-500 uppercase">License Plate</label>
+                          <input 
+                            type="text" 
+                            value={editProviderVehiclePlate} 
+                            onChange={e => setEditProviderVehiclePlate(e.target.value)}
+                            placeholder="e.g. T 123 ABC"
+                            className="w-full bg-charcoal border border-white/10 rounded-lg p-2.5 text-xs text-slate-200 focus:outline-none font-mono font-bold uppercase"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[8px] font-bold text-slate-500 uppercase">Vehicle Color</label>
+                          <input 
+                            type="text" 
+                            value={editProviderVehicleColor} 
+                            onChange={e => setEditProviderVehicleColor(e.target.value)}
+                            placeholder="e.g. Yellow"
+                            className="w-full bg-charcoal border border-white/10 rounded-lg p-2.5 text-xs text-slate-200 focus:outline-none font-bold"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Services provided */}
+                    <div className="bg-charcoal-light/30 border border-white/5 rounded-2xl p-4 space-y-2.5">
+                      <span className="text-[10px] font-black uppercase text-slate-yellow tracking-widest flex items-center gap-1">
+                        <Wrench size={12} /> Approved Rescue Services
+                      </span>
+                      <p className="text-[9px] text-slate-500 font-bold uppercase leading-none">Select all mobile assistance modules you can dispatch for:</p>
+                      <div className="grid grid-cols-2 gap-2 pt-1">
+                        {SERVICES.filter(s => s.id !== 'custom').map(service => {
+                          const isChecked = editProviderServices.includes(service.id);
+                          return (
+                            <button
+                              key={service.id}
+                              type="button"
+                              onClick={() => {
+                                if (isChecked) {
+                                  setEditProviderServices(prev => prev.filter(id => id !== service.id));
+                                } else {
+                                  setEditProviderServices(prev => [...prev, service.id]);
+                                }
+                              }}
+                              className={cn(
+                                "flex items-center gap-2 p-2.5 rounded-xl border text-[11px] font-bold text-left transition-all",
+                                isChecked 
+                                  ? "bg-slate-yellow/10 border-slate-yellow text-slate-yellow" 
+                                  : "bg-charcoal border-white/5 text-slate-400 hover:text-slate-300"
+                              )}
+                            >
+                              <div className={cn(
+                                "w-4 h-4 rounded border flex items-center justify-center shrink-0",
+                                isChecked ? "border-slate-yellow bg-slate-yellow text-charcoal" : "border-white/10 bg-black/20"
+                              )}>
+                                {isChecked && <Check size={10} strokeWidth={4} />}
+                              </div>
+                              <span className="truncate">{service.title}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
 
                     {/* Online/Offline status switch */}
@@ -2326,7 +2717,13 @@ export default function App() {
                           name: editProviderName,
                           phone: editProviderPhone,
                           email: editProviderEmail,
-                          avatar: editProviderAvatar
+                          avatar: editProviderAvatar,
+                          vehicleMake: editProviderVehicleMake,
+                          vehicleModel: editProviderVehicleModel,
+                          vehiclePlate: editProviderVehiclePlate,
+                          vehicleColor: editProviderVehicleColor,
+                          services: editProviderServices,
+                          region: editProviderRegion
                         }));
                         setIsEditingProvider(false);
                         notify.success('Provider profile has been successfully updated!', 'provider');
@@ -2366,6 +2763,12 @@ export default function App() {
                               setEditProviderPhone(providerAccount.phone || '');
                               setEditProviderEmail(providerAccount.email || '');
                               setEditProviderAvatar(providerAccount.avatar || '');
+                              setEditProviderVehicleMake(providerAccount.vehicleMake || 'Toyota');
+                              setEditProviderVehicleModel(providerAccount.vehicleModel || 'Hilux Heavy Tow');
+                              setEditProviderVehiclePlate(providerAccount.vehiclePlate || 'T 123 ABC');
+                              setEditProviderVehicleColor(providerAccount.vehicleColor || 'Yellow');
+                              setEditProviderServices(providerAccount.services || []);
+                              setEditProviderRegion(providerAccount.region || 'Dar es Salaam');
                               setIsEditingProvider(true);
                             }}
                             className="bg-charcoal-light hover:bg-charcoal border border-border-theme hover:border-slate-yellow/40 text-[9px] font-black uppercase text-slate-300 px-4 py-2 rounded-full tracking-widest hover:text-slate-yellow transition-all flex items-center justify-center gap-1.5 select-none"
@@ -2397,21 +2800,66 @@ export default function App() {
                       </div>
                     </div>
 
-                {/* Score Indicators Grid */}
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="glass-card p-3 flex flex-col items-center text-center">
-                    <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest mb-1 leading-none">Accept Rate</span>
-                    <span className="text-sm font-black text-emerald-400 font-mono">{providerStats.successRate}</span>
-                  </div>
-                  <div className="glass-card p-3 flex flex-col items-center text-center">
-                    <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest mb-1 leading-none">Speed</span>
-                    <span className="text-sm font-black text-slate-100 font-mono">{providerStats.speed}</span>
-                  </div>
-                  <div className="glass-card p-3 flex flex-col items-center text-center">
-                    <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest mb-1 leading-none">Completed</span>
-                    <span className="text-sm font-black text-slate-yellow font-mono">{providerStats.jobsCompleted}</span>
-                  </div>
-                </div>
+                    {/* Score Indicators Grid */}
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="glass-card p-3 flex flex-col items-center text-center">
+                        <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest mb-1 leading-none">Accept Rate</span>
+                        <span className="text-sm font-black text-emerald-400 font-mono">{providerStats.successRate}</span>
+                      </div>
+                      <div className="glass-card p-3 flex flex-col items-center text-center">
+                        <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest mb-1 leading-none">Speed</span>
+                        <span className="text-sm font-black text-slate-100 font-mono">{providerStats.speed}</span>
+                      </div>
+                      <div className="glass-card p-3 flex flex-col items-center text-center">
+                        <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest mb-1 leading-none">Completed</span>
+                        <span className="text-sm font-black text-slate-yellow font-mono">{providerStats.jobsCompleted}</span>
+                      </div>
+                    </div>
+
+                    {/* Vehicle, Region & services specifications card */}
+                    <div className="glass-card p-4 space-y-4 border-l-2 border-l-slate-yellow">
+                      <div className="flex justify-between items-center pb-2 border-b border-white/5">
+                        <span className="text-[10px] font-black uppercase text-slate-yellow tracking-widest flex items-center gap-1">
+                          <Truck size={12} /> Active Vehicle & Operation Parameters
+                        </span>
+                        <span className="bg-slate-yellow/15 border border-slate-yellow/30 text-slate-yellow text-[8px] font-black uppercase px-2 py-0.5 rounded">
+                          {providerAccount.region}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4 text-xs">
+                        <div className="space-y-0.5">
+                          <p className="text-[8px] font-bold text-slate-500 uppercase">Service Vehicle</p>
+                          <p className="font-extrabold text-slate-100">{providerAccount.vehicleMake} {providerAccount.vehicleModel}</p>
+                        </div>
+                        <div className="space-y-0.5">
+                          <p className="text-[8px] font-bold text-slate-500 uppercase">License plate & color</p>
+                          <p className="font-mono font-bold text-slate-100 uppercase">{providerAccount.vehiclePlate} ({providerAccount.vehicleColor})</p>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5 pt-2 border-t border-white/5">
+                        <p className="text-[8px] font-bold text-slate-500 uppercase tracking-wider">Authorized Assistance Services</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {providerAccount.services.map(srvId => {
+                            const serviceObj = SERVICES.find(s => s.id === srvId);
+                            if (!serviceObj) return null;
+                            return (
+                              <span 
+                                key={srvId} 
+                                className="flex items-center gap-1 text-[9px] font-black uppercase bg-charcoal border border-white/5 px-2.5 py-1 rounded-lg text-slate-300"
+                              >
+                                <serviceObj.icon size={10} className="text-slate-yellow" />
+                                {serviceObj.title}
+                              </span>
+                            );
+                          })}
+                          {providerAccount.services.length === 0 && (
+                            <span className="text-[9px] font-bold text-slate-500 uppercase italic">No active services registered</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
 
                 {/* Licensing and Official Credentials */}
                 <div className="space-y-2">
@@ -2524,6 +2972,43 @@ export default function App() {
               <WeatherWidget selectedLocation={location.address} />
               <CareNotificationBanner vehicles={vehicles} />
 
+              {(!localStorage.getItem('viyeko_first_time_setup_done') || (vehicles.length === 2 && vehicles[0].id === '1' && vehicles[1].id === '2')) && (
+                <div className="glass-card p-5 border border-slate-yellow/20 bg-slate-yellow/5 relative overflow-hidden rounded-[2rem] animate-fadeIn">
+                  <div className="absolute top-0 right-0 w-24 h-24 bg-slate-yellow/5 rounded-full -mr-6 -mt-6 blur-2xl" />
+                  <div className="relative z-10 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="text-slate-yellow" size={18} />
+                      <h4 className="text-xs font-black text-slate-yellow uppercase tracking-widest">First-Time Setup / Clean Slate</h4>
+                    </div>
+                    <p className="text-xs text-slate-300 font-medium leading-relaxed">
+                      Do you want to use the app for the first time with a clean slate? We will clear all default demo data so you can configure your own personal profile and vehicles.
+                    </p>
+                    <div className="flex gap-2 pt-1">
+                      <button
+                        onClick={() => {
+                          triggerFirstTimeSetup();
+                          localStorage.setItem('viyeko_first_time_setup_done', 'true');
+                        }}
+                        className="bg-slate-yellow text-charcoal font-black text-[10px] px-4 py-2 rounded-xl uppercase tracking-wider hover:bg-slate-yellow/90 active:scale-95 transition-all shadow-md"
+                      >
+                        Yes, Start Clean Slate
+                      </button>
+                      <button
+                        onClick={() => {
+                          localStorage.setItem('viyeko_first_time_setup_done', 'true');
+                          // Simple dummy state change to trigger re-render
+                          setShowAddVehicle(prev => !prev);
+                          setTimeout(() => setShowAddVehicle(prev => !prev), 10);
+                        }}
+                        className="bg-white/5 border border-white/10 text-slate-400 font-bold text-[10px] px-3 py-2 rounded-xl uppercase tracking-wider hover:bg-white/10 transition-all"
+                      >
+                        Keep Demo Data
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {activeRequest && !isTrackingMinimized ? (
                 <LiveTracking 
                   request={activeRequest} 
@@ -2591,25 +3076,41 @@ export default function App() {
                       <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">My Vehicles</h3>
                       <button onClick={() => setActiveTab('profile')} className="text-[10px] font-bold text-slate-yellow uppercase tracking-widest hover:underline">Manage</button>
                     </div>
-                    <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
-                      {vehicles.map(v => (
+                    {vehicles.length === 0 ? (
+                      <div className="glass-card p-4 text-center border-dashed border-white/5">
+                        <p className="text-xs text-slate-500 font-medium mb-2">No registered vehicles found.</p>
                         <button 
-                          key={v.id}
+                          type="button"
                           onClick={() => {
-                            setVehicleInfo(`${v.color} ${v.make} ${v.model} (${v.plate})`);
-                            notify.success(`Selected ${v.make} ${v.model}`, 'user');
-                          }}
-                          className="glass-card p-3 flex flex-col gap-1 min-w-[140px] shrink-0 border-white/5 hover:border-slate-yellow/50 transition-all"
+                            setActiveTab('profile');
+                            setShowAddVehicle(true);
+                          }} 
+                          className="text-[9px] font-black uppercase text-slate-yellow tracking-widest bg-slate-yellow/10 px-3 py-1.5 rounded-xl hover:bg-slate-yellow/20 transition-all"
                         >
-                          <div className="flex items-center justify-between">
-                            <Car size={14} className="text-slate-yellow" />
-                            <span className="text-[8px] font-black bg-slate-yellow/10 text-slate-yellow px-1.5 py-0.5 rounded uppercase">{v.plate.split('-')[0]}</span>
-                          </div>
-                          <span className="text-xs font-black text-slate-100">{v.make} {v.model}</span>
-                          <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">{v.color} • {v.plate}</span>
+                          + Add Your Vehicle
                         </button>
-                      ))}
-                    </div>
+                      </div>
+                    ) : (
+                      <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
+                        {vehicles.map(v => (
+                          <button 
+                            key={v.id}
+                            onClick={() => {
+                              setVehicleInfo(`${v.color} ${v.make} ${v.model} (${v.plate})`);
+                              notify.success(`Selected ${v.make} ${v.model}`, 'user');
+                            }}
+                            className="glass-card p-3 flex flex-col gap-1 min-w-[140px] shrink-0 border-white/5 hover:border-slate-yellow/50 transition-all"
+                          >
+                            <div className="flex items-center justify-between">
+                              <Car size={14} className="text-slate-yellow" />
+                              <span className="text-[8px] font-black bg-slate-yellow/10 text-slate-yellow px-1.5 py-0.5 rounded uppercase">{v.plate.split('-')[0]}</span>
+                            </div>
+                            <span className="text-xs font-black text-slate-100">{v.make} {v.model}</span>
+                            <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">{v.color} • {v.plate}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   {/* Emergency Contact */}
@@ -2620,16 +3121,21 @@ export default function App() {
                         <Phone size={24} />
                       </div>
                       <div>
-                        <p className="text-slate-100 font-black text-sm italic tracking-tight">EMERGENCY HOTLINE</p>
+                        <p className="text-slate-100 font-black text-sm italic tracking-tight">VIYEKO SUPPORT HOTLINE</p>
                         <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">Available 24/7 in Tanzania</p>
                       </div>
                     </div>
-                    <a href="tel:112" className="bg-viyeko-red text-white px-5 py-2.5 rounded-xl font-bold text-xs hover:bg-viyeko-red-dark transition-all shadow-lg shadow-viyeko-red/20 active:scale-95 relative z-10">CALL 112</a>
+                    <button 
+                      onClick={() => setShowEmergencyModal(true)}
+                      className="bg-viyeko-red text-white px-5 py-2.5 rounded-xl font-bold text-xs hover:bg-viyeko-red-dark transition-all shadow-lg shadow-viyeko-red/20 active:scale-95 relative z-10 cursor-pointer"
+                    >
+                      CONTACT
+                    </button>
                   </div>
                 </>
               )}
             </motion.div>
-          ) : activeTab === 'care' ? (
+          ) : (activeTab === 'care' && !isProviderMode) ? (
             <motion.div
               key="care"
               initial={{ opacity: 0, y: 20 }}
@@ -2921,17 +3427,33 @@ export default function App() {
                   {/* Vehicle Quick Select */}
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block font-sans">Choose Target Vehicle</label>
-                    <select
-                      value={selectedCareVehicle}
-                      onChange={(e) => setSelectedCareVehicle(e.target.value)}
-                      className="input-viyeko w-full text-xs font-bold"
-                    >
-                      {vehicles.map(v => (
-                        <option key={v.id} value={v.id} className="bg-charcoal text-slate-100">
-                          {v.make} {v.model} - {v.plate} ({v.color})
-                        </option>
-                      ))}
-                    </select>
+                    {vehicles.length === 0 ? (
+                      <div className="p-3 bg-white/5 border border-dashed border-white/10 rounded-2xl text-center">
+                        <p className="text-[10px] text-slate-400 font-semibold mb-1">No vehicles registered yet.</p>
+                        <button 
+                          type="button" 
+                          onClick={() => {
+                            setActiveTab('profile');
+                            setShowAddVehicle(true);
+                          }}
+                          className="text-[9px] font-black uppercase text-slate-yellow tracking-wider hover:underline"
+                        >
+                          + Go register a vehicle
+                        </button>
+                      </div>
+                    ) : (
+                      <select
+                        value={selectedCareVehicle}
+                        onChange={(e) => setSelectedCareVehicle(e.target.value)}
+                        className="input-viyeko w-full text-xs font-bold"
+                      >
+                        {vehicles.map(v => (
+                          <option key={v.id} value={v.id} className="bg-charcoal text-slate-100">
+                            {v.make} {v.model} - {v.plate} ({v.color})
+                          </option>
+                        ))}
+                      </select>
+                    )}
                   </div>
 
                   {/* Date and Time selectors */}
@@ -3123,15 +3645,36 @@ export default function App() {
                   </div>
 
                   <button 
-                    onClick={() => {
-                      setUser({
+                    onClick={async () => {
+                      const updatedUser = {
                         name: editUserName,
                         phone: editUserPhone,
                         email: editUserEmail,
                         avatar: editUserAvatar
-                      });
+                      };
+                      setUser(updatedUser);
                       setIsEditingUser(false);
-                      notify.success('Your profile was successfully updated!', 'user');
+                      
+                      if (currentUser) {
+                        try {
+                          await setDoc(doc(db, 'users', currentUser.uid), {
+                            ...updatedUser,
+                            uid: currentUser.uid,
+                            role: 'user',
+                            updatedAt: Date.now()
+                          }).catch(err => {
+                            handleFirestoreError(err, OperationType.UPDATE, `users/${currentUser.uid}`);
+                            throw err;
+                          });
+                          notify.success('Your profile was successfully updated on the cloud!', 'user');
+                        } catch (error) {
+                          console.error("Firestore profile update failed:", error);
+                          notify.error('Could not save updated profile to the cloud.', 'user');
+                        }
+                      } else {
+                        localStorage.setItem('viyeko_user_profile', JSON.stringify(updatedUser));
+                        notify.success('Your profile was successfully updated!', 'user');
+                      }
                     }}
                     className="w-full bg-slate-yellow text-charcoal font-black py-3 rounded-xl text-xs hover:bg-slate-yellow/90 transition-all uppercase tracking-widest mt-2"
                   >
@@ -3252,22 +3795,63 @@ export default function App() {
                   )}
 
                   <div className="space-y-3">
-                    {vehicles.map(v => (
-                       <div key={v.id} className="glass-card p-4 flex items-center justify-between group hover:border-slate-yellow/30 transition-all">
-                         <div className="flex items-center gap-4">
-                           <div className="bg-white/5 p-3 rounded-2xl text-slate-yellow">
-                             <Car size={20} />
+                    {vehicles.length === 0 ? (
+                      <div className="glass-card p-6 text-center border-dashed border-white/5">
+                        <p className="text-xs text-slate-500 font-medium mb-1">No registered vehicles found.</p>
+                        <p className="text-[10px] text-slate-600 font-bold uppercase tracking-wider">Click "+ Add New" above to register your car</p>
+                      </div>
+                    ) : (
+                      vehicles.map(v => (
+                         <div key={v.id} className="glass-card p-4 flex items-center justify-between group hover:border-slate-yellow/30 transition-all">
+                           <div className="flex items-center gap-4">
+                             <div className="bg-white/5 p-3 rounded-2xl text-slate-yellow">
+                               <Car size={20} />
+                             </div>
+                             <div>
+                               <h4 className="font-black text-slate-100 text-sm leading-none mb-1">{v.make} {v.model}</h4>
+                               <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">{v.color} • {v.plate}</p>
+                             </div>
                            </div>
-                           <div>
-                             <h4 className="font-black text-slate-100 text-sm leading-none mb-1">{v.make} {v.model}</h4>
-                             <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">{v.color} • {v.plate}</p>
-                           </div>
+                           
+                           {vehicleToDelete === v.id ? (
+                             <div className="flex items-center gap-1.5 bg-rose-500/10 p-1.5 rounded-xl border border-rose-500/20 animate-fadeIn">
+                               <span className="text-[9px] text-rose-400 font-black uppercase tracking-wider pl-1">Confirm Remove?</span>
+                               <button
+                                 type="button"
+                                 onClick={() => {
+                                   handleRemoveVehicle(v.id);
+                                   setVehicleToDelete(null);
+                                 }}
+                                 className="bg-rose-500 hover:bg-rose-600 text-white font-black text-[9px] uppercase px-2 py-1 rounded-lg transition-all"
+                               >
+                                 Yes
+                               </button>
+                               <button
+                                 type="button"
+                                 onClick={() => setVehicleToDelete(null)}
+                                 className="text-slate-400 hover:text-slate-200 font-bold text-[9px] uppercase px-1.5 py-1"
+                               >
+                                 No
+                               </button>
+                             </div>
+                           ) : (
+                             <div className="flex items-center gap-1">
+                               <button className="text-slate-600 hover:text-slate-400 p-1.5 hover:bg-white/5 rounded-lg transition-all">
+                                 <History size={16} />
+                               </button>
+                               <button 
+                                 type="button"
+                                 onClick={() => setVehicleToDelete(v.id)}
+                                 className="text-rose-500/60 hover:text-rose-500 p-1.5 hover:bg-rose-500/10 rounded-lg transition-all"
+                                 title="Remove Vehicle (Sold / Given Away)"
+                               >
+                                 <Trash2 size={16} />
+                               </button>
+                             </div>
+                           )}
                          </div>
-                         <button className="text-slate-600 hover:text-slate-400 transition-colors">
-                           <History size={18} />
-                         </button>
-                       </div>
-                    ))}
+                      ))
+                    )}
                   </div>
                 </div>
 
@@ -3281,12 +3865,51 @@ export default function App() {
                       </div>
                       <ChevronRight size={16} className="text-slate-600" />
                     </div>
-                    <div className="flex items-center justify-between">
+                    <button 
+                      onClick={() => setShowEmergencyModal(true)}
+                      className="w-full flex items-center justify-between text-left hover:bg-white/5 p-2 rounded-xl transition-all"
+                    >
                       <div className="flex items-center gap-3">
                         <Phone size={16} className="text-slate-500" />
                         <span className="text-sm font-bold text-slate-300">Emergency Contacts</span>
                       </div>
                       <ChevronRight size={16} className="text-slate-600" />
+                    </button>
+
+                    <div className="border-t border-white/5 pt-2">
+                      {showSettingsResetConfirm ? (
+                        <div className="bg-rose-500/10 border border-rose-500/20 p-3 rounded-xl space-y-2 animate-fadeIn mt-1">
+                          <p className="text-[10px] text-rose-400 font-black uppercase tracking-wider">Are you absolutely sure? All vehicles & requests will be wiped.</p>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => {
+                                triggerFirstTimeSetup();
+                                setShowSettingsResetConfirm(false);
+                              }}
+                              className="bg-rose-500 hover:bg-rose-600 text-white font-black text-[9px] uppercase px-3 py-1.5 rounded-lg transition-all"
+                            >
+                              Yes, Wipe All Data
+                            </button>
+                            <button
+                              onClick={() => setShowSettingsResetConfirm(false)}
+                              className="text-slate-400 hover:text-slate-200 font-bold text-[9px] uppercase px-2 py-1.5"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setShowSettingsResetConfirm(true)}
+                          className="w-full flex items-center justify-between hover:bg-white/5 p-2 rounded-xl transition-all text-left"
+                        >
+                          <div className="flex items-center gap-3">
+                            <Trash2 size={16} className="text-rose-500" />
+                            <span className="text-sm font-bold text-rose-400">Reset to Clean Slate</span>
+                          </div>
+                          <ChevronRight size={16} className="text-slate-600" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -3333,16 +3956,18 @@ export default function App() {
           <Navigation size={24} />
           <span className="text-[10px] font-bold uppercase tracking-widest">Home</span>
         </button>
-        <button 
-          onClick={() => setActiveTab('care')}
-          className={cn(
-            "flex flex-col items-center gap-1 transition-colors",
-            activeTab === 'care' ? "text-slate-yellow" : "text-slate-500"
-          )}
-        >
-          <Sparkles size={24} />
-          <span className="text-[10px] font-bold uppercase tracking-widest">Care</span>
-        </button>
+        {!isProviderMode && (
+          <button 
+            onClick={() => setActiveTab('care')}
+            className={cn(
+              "flex flex-col items-center gap-1 transition-colors",
+              activeTab === 'care' ? "text-slate-yellow" : "text-slate-500"
+            )}
+          >
+            <Sparkles size={24} />
+            <span className="text-[10px] font-bold uppercase tracking-widest">Care</span>
+          </button>
+        )}
         <button 
           onClick={() => setActiveTab('history')}
           className={cn(
@@ -3990,6 +4615,120 @@ export default function App() {
               >
                 Track Progress
                 <ChevronRight size={20} />
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Emergency & VIYEKO Personnel Support Modal */}
+      <AnimatePresence>
+        {showEmergencyModal && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-slate-900/60 dark:bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-6"
+          >
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-charcoal w-full max-w-sm rounded-[2.5rem] p-6 space-y-6 shadow-2xl border border-white/5 relative"
+            >
+              <button 
+                onClick={() => setShowEmergencyModal(false)}
+                className="absolute top-5 right-5 text-slate-500 hover:text-slate-300 bg-white/5 hover:bg-white/10 p-1.5 rounded-full transition-all"
+              >
+                <X size={16} />
+              </button>
+
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <Phone className="text-slate-yellow animate-pulse" size={20} />
+                  <h3 className="text-lg font-black text-slate-100 uppercase italic tracking-tight">VIYEKO Personnel Support</h3>
+                </div>
+                <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Call or message VIYEKO personnel directly in Tanzania</p>
+              </div>
+
+              <div className="space-y-3">
+                {/* Godson Martin */}
+                <div className="bg-white/5 border border-white/10 p-4 rounded-3xl space-y-3 hover:border-slate-yellow/20 transition-all">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-black text-slate-100 text-sm leading-none mb-1">Godson Martin</h4>
+                      <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">VIYEKO Director & Operations</p>
+                    </div>
+                    <span className="text-[8px] font-black bg-slate-yellow/10 text-slate-yellow px-2 py-0.5 rounded uppercase">Active</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <a 
+                      href="tel:+255750057757"
+                      className="flex-1 bg-slate-yellow text-charcoal font-black text-[10px] py-2.5 rounded-xl uppercase tracking-wider hover:bg-slate-yellow/90 active:scale-95 transition-all text-center flex items-center justify-center"
+                    >
+                      Call
+                    </a>
+                    <a 
+                      href="https://wa.me/255750057757"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] py-2.5 rounded-xl uppercase tracking-wider active:scale-95 transition-all text-center flex items-center justify-center"
+                    >
+                      WhatsApp
+                    </a>
+                  </div>
+                </div>
+
+                {/* Francis Masanja */}
+                <div className="bg-white/5 border border-white/10 p-4 rounded-3xl space-y-3 hover:border-slate-yellow/20 transition-all">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-black text-slate-100 text-sm leading-none mb-1">Francis Masanja</h4>
+                      <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">VIYEKO Technical Lead</p>
+                    </div>
+                    <span className="text-[8px] font-black bg-slate-yellow/10 text-slate-yellow px-2 py-0.5 rounded uppercase">Active</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <a 
+                      href="tel:+255747746619"
+                      className="flex-1 bg-slate-yellow text-charcoal font-black text-[10px] py-2.5 rounded-xl uppercase tracking-wider hover:bg-slate-yellow/90 active:scale-95 transition-all text-center flex items-center justify-center"
+                    >
+                      Call
+                    </a>
+                    <a 
+                      href="https://wa.me/255747746619"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] py-2.5 rounded-xl uppercase tracking-wider active:scale-95 transition-all text-center flex items-center justify-center"
+                    >
+                      WhatsApp
+                    </a>
+                  </div>
+                </div>
+
+                {/* General Emergency 112 */}
+                <div className="bg-viyeko-red/10 border border-viyeko-red/20 p-4 rounded-3xl space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-black text-rose-400 text-sm leading-none mb-1">National Emergency Hotline</h4>
+                      <p className="text-[10px] text-rose-500 font-bold uppercase tracking-wider">Police, Ambulance, & Rescue</p>
+                    </div>
+                    <span className="text-[8px] font-black bg-rose-500/20 text-rose-400 px-2 py-0.5 rounded uppercase">Tanzania 24/7</span>
+                  </div>
+                  <a 
+                    href="tel:112"
+                    className="block w-full bg-viyeko-red hover:bg-viyeko-red-dark text-white font-black text-[10px] py-2.5 rounded-xl uppercase tracking-wider active:scale-95 transition-all text-center"
+                  >
+                    Dial 112
+                  </a>
+                </div>
+              </div>
+
+              <button 
+                onClick={() => setShowEmergencyModal(false)}
+                className="w-full bg-white/5 border border-white/10 text-slate-400 font-bold py-2.5 rounded-xl text-xs hover:bg-white/10 transition-all uppercase tracking-widest mt-2"
+              >
+                Close Support Directory
               </button>
             </motion.div>
           </motion.div>
