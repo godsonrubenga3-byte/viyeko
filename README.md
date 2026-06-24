@@ -1,63 +1,20 @@
-# VIYEKO - Roadside Assistance Platform
+<div align="center">
+<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
+</div>
 
-VIYEKO is a modern, responsive roadside assistance application specifically designed for the Punjab and Chandigarh regions. It provides users with quick access to essential vehicle services like breakdown recovery, tire changes, fuel delivery, and more.
+# Run and deploy your AI Studio app
 
-## 🚀 Features
+This contains everything you need to run your app locally.
 
-- **User & Provider Modes:** Toggle between requesting help and managing service requests.
-- **Real-time Tracking:** Visualized service progress with a simulated timeline and map.
-- **Regional Focus:** Tailored for Chandigarh, Mohali, Panchkula, and other major cities in Punjab.
-- **Vehicle Management:** Save multiple vehicles for quick service requests.
-- **Offline Support:** Local storage persistence for requests and user preferences.
-- **Modern UI:** Built with Framer Motion for smooth transitions and a sleek "glassmorphism" aesthetic.
-- **Dark Mode:** System-aware dark mode support.
+View your app in AI Studio: https://ai.studio/apps/bf05c66e-d510-4f20-bb5f-9a66cbaea1c0
 
-## 🛠️ Tech Stack
+## Run Locally
 
-- **Frontend:** React 19, TypeScript, Vite
-- **Styling:** Tailwind CSS 4, Lucide React (Icons)
-- **Animations:** Motion (Framer Motion)
-- **Date Handling:** date-fns
-- **Notifications:** Sonner
+**Prerequisites:**  Node.js
 
-## 📦 Getting Started
 
-### Prerequisites
-
-- Node.js (Latest LTS recommended)
-- npm or yarn
-
-### Installation
-
-1. Clone the repository:
-   ```bash
-   git clone <repository-url>
-   cd viyeko
-   ```
-
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-
-3. Start the development server:
-   ```bash
-   npm run dev
-   ```
-
-4. Build for production:
-   ```bash
-   npm run build
-   ```
-
-## 📖 Documentation
-
-Detailed documentation on components and application architecture can be found in the [docs/](./docs/) directory:
-
-- [Architecture Overview](./docs/ARCHITECTURE.md)
-- [Component Documentation](./docs/COMPONENTS.md)
-- [Types & Services](./docs/TYPES.md)
-
-## 📄 License
-
-This project is licensed under the MIT License.
+1. Install dependencies:
+   `npm install`
+2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+3. Run the app:
+   `npm run dev`

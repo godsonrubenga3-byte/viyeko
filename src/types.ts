@@ -3,11 +3,10 @@ import { LucideIcon, Car, Wrench, Fuel, Droplet, Truck, Utensils, ShieldAlert } 
 export type ServiceType = 'emergency' | 'extended';
 
 export interface User {
-  id: string;
   name: string;
   phone: string;
   email: string;
-  avatar: string;
+  avatar?: string;
 }
 
 export interface Vehicle {
@@ -26,26 +25,16 @@ export interface Service {
   icon: LucideIcon;
   type: ServiceType;
   color: string;
-  price: number; // This acts as a "Suggested/Min" price now
+  price: number;
   eta?: string;
   isAddOn?: boolean;
-}
-
-export interface Bid {
-  id: string;
-  providerId: string;
-  providerName: string;
-  price: number;
-  eta: number; // minutes
-  timestamp: number;
-  rating: number;
 }
 
 export interface Request {
   id: string;
   serviceId: string;
   addOnIds?: string[];
-  status: 'searching' | 'bidding' | 'assigned' | 'on-the-way' | 'arrived' | 'in-progress' | 'completed' | 'canceled';
+  status: 'searching' | 'assigned' | 'on-the-way' | 'arrived' | 'in-progress' | 'completed';
   location: {
     lat?: number;
     lng?: number;
@@ -54,37 +43,32 @@ export interface Request {
   timestamp: number;
   vehicleInfo: string;
   notes?: string;
-  estimatedArrival?: number;
-  totalCost?: number;
-  userId?: string;
-  providerId?: string;
-  bids?: Bid[]; // Live collection of quotes from garages
-  acceptedBidId?: string;
-  lastUpdatedBy?: 'driver' | 'provider';
+  estimatedArrival?: number; // in minutes
+  totalCost: number;
 }
 
 export const SERVICES: Service[] = [
   {
     id: 'breakdown',
     title: 'Breakdown',
-    subtitle: 'Engine / Battery',
+    subtitle: 'Towing / Recovery',
     description: 'Quick recovery for engine or mechanical failure.',
     icon: Car,
     type: 'emergency',
     color: 'bg-rose-500',
-    price: 35000,
-    eta: 'Calculating bids...'
+    price: 2000,
+    eta: '12-18 min'
   },
   {
     id: 'tire',
     title: 'Tire Change',
-    subtitle: 'Flat / Puncture',
+    subtitle: 'Spare or Repair',
     description: 'Flat tire? We\'ll swap it for your spare or repair it.',
     icon: Wrench,
     type: 'emergency',
     color: 'bg-slate-yellow',
-    price: 20000,
-    eta: 'Calculating bids...'
+    price: 80,
+    eta: '8-14 min'
   },
   {
     id: 'fuel',
@@ -94,18 +78,40 @@ export const SERVICES: Service[] = [
     icon: Fuel,
     type: 'emergency',
     color: 'bg-emerald-600',
-    price: 15000,
-    eta: 'Calculating bids...'
+    price: 508.6,
+    eta: '15-22 min'
   },
   {
     id: 'wash',
     title: 'Car Wash',
-    subtitle: 'Mobile Wash',
+    subtitle: 'Mobile Detailing',
     description: 'Professional cleaning at your location.',
     icon: Droplet,
     type: 'emergency',
     color: 'bg-sky-600',
-    price: 10000,
-    eta: 'Calculating bids...'
+    price: 150,
+    eta: '20-30 min'
+  },
+  {
+    id: 'addon-drinks',
+    title: 'Cold Drinks',
+    subtitle: 'Soda / Water / Energy',
+    description: 'Ice-cold refreshments brought along by the dispatch team.',
+    icon: Utensils,
+    type: 'extended',
+    color: 'bg-amber-600',
+    price: 20,
+    isAddOn: true
+  },
+  {
+    id: 'addon-snacks',
+    title: 'Snack Pack',
+    subtitle: 'Chips / Nuts / Cookies',
+    description: 'A selection of snacks for your comfort while waiting.',
+    icon: Utensils,
+    type: 'extended',
+    color: 'bg-rose-600',
+    price: 50,
+    isAddOn: true
   }
 ];

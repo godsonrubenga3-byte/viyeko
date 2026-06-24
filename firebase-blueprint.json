@@ -32,6 +32,33 @@
         "createdAt": { "type": "integer" }
       },
       "required": ["id", "vehicleId", "uid", "type", "date", "mileage", "cost", "createdAt"]
+    },
+    "Request": {
+      "title": "Service Request",
+      "description": "A roadside assistance or maintenance request.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "uid": { "type": "string" },
+        "serviceId": { "type": "string" },
+        "addOnIds": { "type": "array", "items": { "type": "string" } },
+        "status": { "type": "string", "enum": ["searching", "assigned", "on-the-way", "arrived", "in-progress", "completed"] },
+        "location": {
+          "type": "object",
+          "properties": {
+            "lat": { "type": "number" },
+            "lng": { "type": "number" },
+            "address": { "type": "string" }
+          },
+          "required": ["address"]
+        },
+        "timestamp": { "type": "integer" },
+        "vehicleInfo": { "type": "string" },
+        "notes": { "type": "string" },
+        "estimatedArrival": { "type": "integer" },
+        "totalCost": { "type": "number" }
+      },
+      "required": ["id", "uid", "serviceId", "status", "location", "timestamp", "vehicleInfo", "totalCost"]
     }
   },
   "firestore": {
@@ -42,6 +69,10 @@
     "/serviceEntries/{entryId}": {
       "schema": "ServiceEntry",
       "description": "Maintenance records."
+    },
+    "/requests/{requestId}": {
+      "schema": "Request",
+      "description": "Roadside assistance and service requests."
     }
   }
 }

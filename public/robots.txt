@@ -1,1 +1,0 @@
-User-agent: *\nAllow: /\nDisallow: /profile\nDisallow: /history\nDisallow: /provider\n\nSitemap: https://viyeko.vercel.app/sitemap.xml

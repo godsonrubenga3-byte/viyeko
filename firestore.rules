@@ -1,21 +1,35 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // 1. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
     // Helper Functions
     function isAuthenticated() {
       return request.auth != null;
     }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
     function isOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
     }
+
     function isAdmin() {
-      return isAuthenticated() &&
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
-          (request.auth.token.email == "godsonrubenga3@gmail.com" && request.auth.token.email_verified == true)); // Default admin
+      return isAuthenticated() && (
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
+        (request.auth.token.email == "godsonrubenga3@gmail.com" && request.auth.token.email_verified == true)
+      );
     }
+
     function isDocOwner() {
       return isAuthenticated() && request.auth.uid == resource.data.uid;
     }
+
     function incomingDocOwner() {
       return isAuthenticated() && request.auth.uid == request.resource.data.uid;
     }
@@ -27,9 +41,10 @@ service cloud.firestore {
 
     // User Rules
     match /users/{userId} {
-      allow read: if isOwner(userId) || isAdmin();
-      allow create: if isOwner(userId) && isValidUser(request.resource.data);
-      allow update: if (isOwner(userId) || isAdmin()) && isValidUser(request.resource.data);
+      allow get: if (isOwner(userId) || isAdmin()) && isValidId(userId);
+      allow list: if isAuthenticated() && userId == request.auth.uid;
+      allow create: if isOwner(userId) && isValidId(userId) && isValidUser(request.resource.data);
+      allow update: if (isOwner(userId) || isAdmin()) && isValidId(userId) && isValidUser(request.resource.data);
     }
 
     function isValidUser(data) {
@@ -40,34 +55,70 @@ service cloud.firestore {
 
     // Vehicle Rules
     match /vehicles/{vehicleId} {
-      allow read: if isDocOwner() || isAdmin();
-      allow create: if incomingDocOwner() && isValidVehicle(request.resource.data);
-      allow update: if (isDocOwner() || isAdmin()) && incomingDocOwner() && isValidVehicle(request.resource.data);
-      allow delete: if isDocOwner() || isAdmin();
+      allow get: if (isDocOwner() || isAdmin()) && isValidId(vehicleId);
+      allow list: if isAuthenticated() && resource.data.uid == request.auth.uid;
+      allow create: if incomingDocOwner() && isValidId(vehicleId) && isValidVehicle(request.resource.data);
+      allow update: if (isDocOwner() || isAdmin()) && incomingDocOwner() && isValidId(vehicleId) && isValidVehicle(request.resource.data);
+      allow delete: if (isDocOwner() || isAdmin()) && isValidId(vehicleId);
     }
 
     function isValidVehicle(data) {
-      return data.keys().hasAll(['id', 'uid', 'make', 'model', 'year', 'initialMileage', 'currentMileage', 'createdAt']) &&
+      return data.keys().hasAll(['id', 'uid', 'make', 'model', 'year', 'initialMileage', 'currentMileage', 'createdAt', 'plate', 'color']) &&
+             data.id is string && data.id.size() <= 128 &&
+             data.uid is string &&
              data.make is string && data.make.size() > 0 && data.make.size() < 100 &&
              data.model is string && data.model.size() > 0 && data.model.size() < 100 &&
+             data.plate is string && data.plate.size() > 0 && data.plate.size() < 30 &&
+             data.color is string && data.color.size() > 0 && data.color.size() < 30 &&
              data.year is int && data.year > 1900 && data.year < 2100 &&
              data.initialMileage is int && data.initialMileage >= 0 &&
-             data.currentMileage is int && data.currentMileage >= data.initialMileage;
+             data.currentMileage is int && data.currentMileage >= data.initialMileage &&
+             data.createdAt is int;
     }
 
     // Service Entry Rules
     match /serviceEntries/{entryId} {
-      allow read: if isDocOwner() || isAdmin();
-      allow create: if incomingDocOwner() && isValidServiceEntry(request.resource.data);
-      allow update: if (isDocOwner() || isAdmin()) && incomingDocOwner() && isValidServiceEntry(request.resource.data);
-      allow delete: if isDocOwner() || isAdmin();
+      allow get: if (isDocOwner() || isAdmin()) && isValidId(entryId);
+      allow list: if isAuthenticated() && resource.data.uid == request.auth.uid;
+      allow create: if incomingDocOwner() && isValidId(entryId) && isValidServiceEntry(request.resource.data);
+      allow update: if (isDocOwner() || isAdmin()) && incomingDocOwner() && isValidId(entryId) && isValidServiceEntry(request.resource.data);
+      allow delete: if (isDocOwner() || isAdmin()) && isValidId(entryId);
     }
 
     function isValidServiceEntry(data) {
       return data.keys().hasAll(['id', 'vehicleId', 'uid', 'type', 'date', 'mileage', 'cost', 'createdAt']) &&
+             data.id is string && data.id.size() <= 128 &&
+             data.vehicleId is string && data.vehicleId.size() <= 128 &&
+             data.uid is string &&
              data.type in ['oil_change', 'tire_rotation', 'brake_check', 'other'] &&
+             data.date is string && data.date.size() <= 30 &&
              data.mileage is int && data.mileage >= 0 &&
-             data.cost is number && data.cost >= 0;
+             (data.cost is int || data.cost is float) && data.cost >= 0 &&
+             data.createdAt is int;
+    }
+
+    // Request Rules
+    match /requests/{requestId} {
+      allow get: if (isDocOwner() || isAdmin() || (isAuthenticated() && resource.data.status == 'searching')) && isValidId(requestId);
+      allow list: if isAuthenticated() && (resource.data.uid == request.auth.uid || resource.data.status == 'searching');
+      allow create: if incomingDocOwner() && isValidId(requestId) && isValidRequest(request.resource.data);
+      allow update: if (isDocOwner() || isAdmin() || isAuthenticated()) && isValidId(requestId) && isValidRequest(request.resource.data);
+      allow delete: if (isDocOwner() || isAdmin()) && isValidId(requestId);
+    }
+
+    function isValidRequest(data) {
+      return data.keys().hasAll(['id', 'uid', 'serviceId', 'status', 'location', 'timestamp', 'vehicleInfo', 'totalCost']) &&
+             data.id is string && data.id.size() <= 128 &&
+             data.uid is string &&
+             data.serviceId is string && data.serviceId.size() <= 128 &&
+             data.status in ['searching', 'assigned', 'on-the-way', 'arrived', 'in-progress', 'completed'] &&
+             data.location.address is string && data.location.address.size() > 0 && data.location.address.size() < 500 &&
+             (data.timestamp is int || data.timestamp is float) &&
+             data.vehicleInfo is string && data.vehicleInfo.size() <= 200 &&
+             (data.totalCost is int || data.totalCost is float) && data.totalCost >= 0 &&
+             (!data.keys().hasAny(['addOnIds']) || (data.addOnIds is list && data.addOnIds.size() <= 10)) &&
+             (!data.keys().hasAny(['notes']) || (data.notes is string && data.notes.size() <= 1000)) &&
+             (!data.keys().hasAny(['estimatedArrival']) || (data.estimatedArrival is int && data.estimatedArrival >= 0));
     }
   }
 }
