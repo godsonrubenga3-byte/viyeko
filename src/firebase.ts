@@ -40,8 +40,19 @@ export interface FirestoreErrorInfo {
 }
 
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errorMessage = error instanceof Error ? error.message : String(error);
+  const errCode = (error as any)?.code;
+  
+  const isOffline = 
+    errorMessage.toLowerCase().includes('offline') ||
+    errorMessage.toLowerCase().includes('could not reach') ||
+    errorMessage.toLowerCase().includes('unreachable') ||
+    errorMessage.toLowerCase().includes('backend didn\'t respond') ||
+    errCode === 'unavailable' ||
+    errCode === 'deadline-exceeded';
+
   const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
+    error: errorMessage,
     authInfo: {
       userId: auth.currentUser?.uid,
       email: auth.currentUser?.email,
@@ -56,6 +67,14 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     operationType,
     path
   };
+
+  if (isOffline) {
+    console.warn('Firestore Offline (operating in fallback local mode):', JSON.stringify(errInfo));
+    const offlineErr = new Error(JSON.stringify(errInfo));
+    (offlineErr as any).isOffline = true;
+    throw offlineErr;
+  }
+
   console.error('Firestore Error: ', JSON.stringify(errInfo));
   throw new Error(JSON.stringify(errInfo));
 }

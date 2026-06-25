@@ -100,7 +100,8 @@ service cloud.firestore {
     // Request Rules
     match /requests/{requestId} {
       allow get: if (isDocOwner() || isAdmin() || (isAuthenticated() && resource.data.status == 'searching')) && isValidId(requestId);
-      allow list: if isAuthenticated() && (resource.data.uid == request.auth.uid || resource.data.status == 'searching');
+      allow list: if isAuthenticated() && resource.data.uid == request.auth.uid;
+      allow list: if isAuthenticated() && resource.data.status == 'searching';
       allow create: if incomingDocOwner() && isValidId(requestId) && isValidRequest(request.resource.data);
       allow update: if (isDocOwner() || isAdmin() || isAuthenticated()) && isValidId(requestId) && isValidRequest(request.resource.data);
       allow delete: if (isDocOwner() || isAdmin()) && isValidId(requestId);
@@ -111,7 +112,7 @@ service cloud.firestore {
              data.id is string && data.id.size() <= 128 &&
              data.uid is string &&
              data.serviceId is string && data.serviceId.size() <= 128 &&
-             data.status in ['searching', 'assigned', 'on-the-way', 'arrived', 'in-progress', 'completed'] &&
+             data.status in ['searching', 'assigned', 'on-the-way', 'arrived', 'in-progress', 'completed', 'transferred'] &&
              data.location.address is string && data.location.address.size() > 0 && data.location.address.size() < 500 &&
              (data.timestamp is int || data.timestamp is float) &&
              data.vehicleInfo is string && data.vehicleInfo.size() <= 200 &&

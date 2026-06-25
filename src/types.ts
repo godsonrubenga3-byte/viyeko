@@ -34,7 +34,7 @@ export interface Request {
   id: string;
   serviceId: string;
   addOnIds?: string[];
-  status: 'searching' | 'assigned' | 'on-the-way' | 'arrived' | 'in-progress' | 'completed';
+  status: 'searching' | 'assigned' | 'on-the-way' | 'arrived' | 'in-progress' | 'completed' | 'transferred';
   location: {
     lat?: number;
     lng?: number;

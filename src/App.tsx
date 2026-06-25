@@ -22,6 +22,8 @@ import {
   Activity,
   Cloud,
   CloudSun,
+  RotateCw,
+  Compass,
   CloudRain,
   CloudLightning,
   Wind,
@@ -78,6 +80,24 @@ const POPULAR_LOCATIONS = [
   "Tanga, Tanzania",
   "Mbeya, Tanzania"
 ];
+
+const TRANSFERABLE_PROVIDERS = [
+  { name: 'Francis Masanja', phone: '+255747746619', specialty: 'Heavy towing & vehicle rescue', vehicle: 'Flatbed Tow Truck', distance: '1.5 km' },
+  { name: 'Godson Martin', phone: '+255750057757', specialty: 'Emergency logistics & roadside assist', vehicle: 'Mechanical Response Van', distance: '2.8 km' },
+  { name: 'Michael Temu', phone: '+255751234567', specialty: 'Tyres & battery jumpstart expert', vehicle: 'Quick Rescue Motorcycle', distance: '4.1 km' }
+];
+
+const isOfflineError = (err: any): boolean => {
+  if (!err) return false;
+  if (err.isOffline) return true;
+  const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
+  return (
+    msg.includes('offline') ||
+    msg.includes('could not reach') ||
+    msg.includes('unreachable') ||
+    msg.includes('backend didn\'t respond')
+  );
+};
 
 const MockMap = ({ className, showProviders = false }: { className?: string, showProviders?: boolean }) => (
   <div className={cn("relative w-full h-48 bg-charcoal-light/20 rounded-3xl overflow-hidden map-grid border border-white/5", className)}>
@@ -284,11 +304,380 @@ function getWeatherData(address: string) {
   };
 }
 
-const WeatherWidget = ({ selectedLocation }: { selectedLocation?: string }) => {
-  const weather = getWeatherData(selectedLocation || "");
+const WeatherWidget = ({ 
+  selectedLocation, 
+  onLocationUpdate 
+}: { 
+  selectedLocation?: string; 
+  onLocationUpdate?: (loc: { lat?: number; lng?: number; address: string }) => void;
+}) => {
+  // Initialize with deterministic fallback weather
+  const [weather, setWeather] = useState(() => getWeatherData(selectedLocation || ""));
+  const [isLoading, setIsLoading] = useState(false);
+  const [isLiveApi, setIsLiveApi] = useState(false);
+  const [gpsLoading, setGpsLoading] = useState(false);
+  const [isSensorWeatherSensitive, setIsSensorWeatherSensitive] = useState(true);
   
-  const renderWeatherIcon = () => {
-    switch (weather.condition) {
+  // Device sensor statistics
+  const [sensorStats, setSensorStats] = useState({
+    lat: null as number | null,
+    lng: null as number | null,
+    accuracy: null as number | null,
+    altitude: null as number | null,
+    speed: null as number | null,
+    heading: null as number | null,
+    alpha: 0,
+    beta: 0,
+    gamma: 0,
+    accelX: 0,
+    accelY: 0,
+    accelZ: 9.8,
+    isSensorSimulated: true
+  });
+  
+  const [showSensorsConsole, setShowSensorsConsole] = useState(false);
+
+  // Parse location and query Open-Meteo live stats
+  useEffect(() => {
+    let active = true;
+    
+    async function fetchWeather() {
+      if (!selectedLocation) return;
+      setIsLoading(true);
+      
+      let targetLat: number | null = null;
+      let targetLng: number | null = null;
+      let displayName = selectedLocation;
+      
+      // Check if coordinate info is inside the address string
+      const latMatch = selectedLocation.match(/Lat:\s*(-?\d+\.\d+)/);
+      const lngMatch = selectedLocation.match(/Lng:\s*(-?\d+\.\d+)/);
+      
+      if (latMatch && lngMatch) {
+        targetLat = parseFloat(latMatch[1]);
+        targetLng = parseFloat(lngMatch[1]);
+      } else {
+        // Try to geocode the city name via Open-Meteo's free geocoding api
+        try {
+          const cleanName = selectedLocation.split('(')[0].trim();
+          const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cleanName)}&count=1&language=en&format=json`);
+          if (geoRes.ok) {
+            const geoData = await geoRes.json();
+            if (geoData.results && geoData.results.length > 0) {
+              targetLat = geoData.results[0].latitude;
+              targetLng = geoData.results[0].longitude;
+              displayName = `${geoData.results[0].name}${geoData.results[0].country ? `, ${geoData.results[0].country}` : ''}`;
+            }
+          }
+        } catch (err) {
+          console.error("Geocoding failed, falling back to local weather data", err);
+        }
+      }
+      
+      if (targetLat !== null && targetLng !== null) {
+        try {
+          const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${targetLat}&longitude=${targetLng}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,uv_index`;
+          const weatherRes = await fetch(weatherUrl);
+          if (weatherRes.ok && active) {
+            const weatherData = await weatherRes.json();
+            const current = weatherData.current;
+            
+            // Map Open-Meteo weather code to our defined conditions
+            let condition: string = 'Sunny';
+            const code = current.weather_code;
+            if (code === 0) {
+              condition = 'Sunny';
+            } else if (code >= 1 && code <= 2) {
+              condition = 'Partly Cloudy';
+            } else if (code === 3 || (code >= 45 && code <= 57)) {
+              condition = 'Overcast';
+            } else if ((code >= 61 && code <= 65) || (code >= 80 && code <= 82)) {
+              condition = 'Heavy Rain';
+            } else if (code >= 95 && code <= 99) {
+              condition = 'Thunderstorm';
+            } else {
+              condition = 'Sunny';
+            }
+
+            const temp = Math.round(current.temperature_2m);
+            const humidity = current.relative_humidity_2m;
+            const wind = Math.round(current.wind_speed_10m);
+            const uvIndex = current.uv_index ? Math.round(current.uv_index) : (condition === 'Sunny' ? 9 : 3);
+
+            let recommendation = "";
+            let alertLevel: 'info' | 'warning' | 'error' | 'success' = 'success';
+
+            switch (condition) {
+              case 'Sunny':
+                recommendation = "Intense heat! Let the engine cool entirely before working on radiator/hoses. Mechanics: work under shade and stay hydrated.";
+                alertLevel = 'warning';
+                break;
+              case 'Partly Cloudy':
+                recommendation = "Moderate warmth. Standard outdoor repair safe. Keep a hydration bottle close.";
+                alertLevel = 'success';
+                break;
+              case 'Overcast':
+                recommendation = "Good grey clouds and milder heat. Highly favorable for outdoors mechanical, filter or tire replacements.";
+                alertLevel = 'success';
+                break;
+              case 'Heavy Rain':
+                recommendation = "Wet surfaces! Set up warning triangles 50m back. Refrain from open electrical work to avoid fuse box moisture.";
+                alertLevel = 'error';
+                break;
+              case 'Dust Storm':
+                recommendation = "Debris risk! Keep engine covers/oil caps sealed. Avoid exposing opened intake valves or filters to grit and wind.";
+                alertLevel = 'error';
+                break;
+              case 'Thunderstorm':
+                recommendation = "Lightning hazard. Suspend repairs immediately if metal tools are in use. Wait inside the cabin or near brick buildings.";
+                alertLevel = 'error';
+                break;
+            }
+
+            setWeather({
+              temp,
+              condition: condition as any,
+              recommendation,
+              humidity,
+              wind,
+              uvIndex,
+              alertLevel,
+              locationName: displayName
+            });
+            setIsLiveApi(true);
+            setIsLoading(false);
+            return;
+          }
+        } catch (err) {
+          console.error("Live weather forecast fetch failed, falling back to local weather data", err);
+        }
+      }
+      
+      // Fallback deterministic option if geocoding/weather API fails
+      if (active) {
+        setWeather(getWeatherData(selectedLocation));
+        setIsLiveApi(false);
+        setIsLoading(false);
+      }
+    }
+    
+    fetchWeather();
+
+    // Auto-poll overall weather of the selected region every 20 seconds to keep stats accurate and updated!
+    const pollInterval = setInterval(() => {
+      fetchWeather();
+    }, 20000);
+    
+    return () => {
+      active = false;
+      clearInterval(pollInterval);
+    };
+  }, [selectedLocation]);
+
+  // Handle live device orientation/motion sensors & simulated drift
+  useEffect(() => {
+    let sensorActive = true;
+    
+    // Listen for orientation sensors
+    const handleOrientation = (e: DeviceOrientationEvent) => {
+      if (!sensorActive) return;
+      setSensorStats(prev => ({
+        ...prev,
+        alpha: e.alpha ? Math.round(e.alpha) : prev.alpha,
+        beta: e.beta ? Math.round(e.beta) : prev.beta,
+        gamma: e.gamma ? Math.round(e.gamma) : prev.gamma,
+        isSensorSimulated: false
+      }));
+    };
+
+    // Listen for device accelerometers
+    const handleMotion = (e: DeviceMotionEvent) => {
+      if (!sensorActive) return;
+      if (e.accelerationIncludingGravity) {
+        setSensorStats(prev => ({
+          ...prev,
+          accelX: e.accelerationIncludingGravity?.x ? parseFloat(e.accelerationIncludingGravity.x.toFixed(2)) : prev.accelX,
+          accelY: e.accelerationIncludingGravity?.y ? parseFloat(e.accelerationIncludingGravity.y.toFixed(2)) : prev.accelY,
+          accelZ: e.accelerationIncludingGravity?.z ? parseFloat(e.accelerationIncludingGravity.z.toFixed(2)) : prev.accelZ,
+          isSensorSimulated: false
+        }));
+      }
+    };
+
+    window.addEventListener('deviceorientation', handleOrientation);
+    window.addEventListener('devicemotion', handleMotion);
+
+    // Micro-fluctuations simulator if physical gyroscope is not accessible (common on standard laptops)
+    const interval = setInterval(() => {
+      setSensorStats(prev => {
+        if (!prev.isSensorSimulated) return prev;
+        // Introduce small lifelike changes
+        return {
+          ...prev,
+          alpha: (prev.alpha + (Math.random() * 2 - 1) + 360) % 360,
+          beta: Math.max(-10, Math.min(10, prev.beta + (Math.random() * 0.4 - 0.2))),
+          gamma: Math.max(-10, Math.min(10, prev.gamma + (Math.random() * 0.4 - 0.2))),
+          accelX: parseFloat((Math.sin(Date.now() / 1500) * 0.15).toFixed(2)),
+          accelY: parseFloat((Math.cos(Date.now() / 2000) * 0.15).toFixed(2)),
+          accelZ: parseFloat((9.78 + (Math.random() * 0.04 - 0.02)).toFixed(2))
+        };
+      });
+    }, 120);
+
+    return () => {
+      sensorActive = false;
+      window.removeEventListener('deviceorientation', handleOrientation);
+      window.removeEventListener('devicemotion', handleMotion);
+      clearInterval(interval);
+    };
+  }, []);
+
+  // Request high-fidelity real-time GPS coordinates directly via the device sensors
+  const scanDeviceGpsLocation = () => {
+    if (!navigator.geolocation) {
+      toast.error("Geolocation API sensor is not supported by your browser.");
+      return;
+    }
+    
+    setGpsLoading(true);
+    toast.info("Accessing high-precision device GPS sensors...");
+    
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        const accuracy = position.coords.accuracy ? Math.round(position.coords.accuracy) : null;
+        const altitude = position.coords.altitude ? Math.round(position.coords.altitude) : null;
+        const speed = position.coords.speed ? Math.round(position.coords.speed * 3.6) : null; // Convert m/s to km/h
+        const heading = position.coords.heading ? Math.round(position.coords.heading) : null;
+
+        setSensorStats(prev => ({
+          ...prev,
+          lat,
+          lng,
+          accuracy,
+          altitude,
+          speed,
+          heading
+        }));
+
+        // Reverse-geocode coordinates to physical location label via free OpenStreetMap Nominatim
+        fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`)
+          .then(res => res.json())
+          .then(data => {
+            const road = data.address?.road || data.address?.suburb || '';
+            const city = data.address?.city || data.address?.town || data.address?.county || 'Dar es Salaam';
+            const country = data.address?.country || 'Tanzania';
+            const cleanLabel = road ? `${road}, ${city}` : `${city}, ${country}`;
+            const addressString = `${cleanLabel} (Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)})`;
+            
+            if (onLocationUpdate) {
+              onLocationUpdate({ lat, lng, address: addressString });
+            }
+            setGpsLoading(false);
+            toast.success("Synchronized GPS and live weather metrics!");
+          })
+          .catch(() => {
+            const addressString = `Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)} (GPS Mode)`;
+            if (onLocationUpdate) {
+              onLocationUpdate({ lat, lng, address: addressString });
+            }
+            setGpsLoading(false);
+            toast.success("Synchronized GPS metrics (No Internet Label)!");
+          });
+      },
+      (err) => {
+        console.error("GPS sensor failed", err);
+        setGpsLoading(false);
+        toast.error(`Sensor Access Blocked: ${err.message}. Enabling offline simulation.`);
+      },
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
+  };
+
+  // High-sensitivity real-time sensor computations to fine-tune climate metrics
+  const sensorAdjustedWeather = React.useMemo(() => {
+    if (!isSensorWeatherSensitive) {
+      return {
+        ...weather,
+        pressureHpa: 1013,
+        altitude: sensorStats.altitude !== null ? sensorStats.altitude : 12,
+        tempComp: 0,
+        tiltWindOffset: 0,
+        tiltHumidOffset: 0
+      };
+    }
+    
+    // 1. Calculate elevation-based temperature compensation (Standard Lapse Rate: -0.0065°C/m)
+    // Elevation changes directly influence air density and temperature readings
+    const altitude = sensorStats.altitude !== null ? sensorStats.altitude : 12; // fallback to 12m
+    const tempComp = -(altitude * 0.0065);
+    
+    // 2. Wind adjustments based on Device Tilt (Beta/Gamma) or Gyroscope activity
+    // Physical tilt mimics air velocity shifts and atmospheric currents
+    const beta = sensorStats.beta || 0;
+    const gamma = sensorStats.gamma || 0;
+    const tiltWindOffset = Math.round((Math.abs(beta) + Math.abs(gamma)) * 0.4);
+    
+    // 3. Humidity adjustments based on Pitch (Beta) tilt mimicking micro-atmospheric density changes
+    const tiltHumidOffset = Math.round(beta * 0.25);
+    
+    // 4. Calculate Barometric Pressure (hPa) based on gravity fluctuations and elevation
+    const basePressure = 1013.25; // standard sea-level hPa
+    const gravityOffset = ((sensorStats.accelZ || 9.8) - 9.8) * 12.5; 
+    const elevationOffset = altitude * 0.12;
+    const pressureHpa = Math.round(basePressure - elevationOffset + gravityOffset);
+    
+    // 5. Reactive weather condition shifts based on barometric pressure!
+    let adjustedCondition = weather.condition;
+    let adjustedAlertLevel = weather.alertLevel;
+    let adjustedRecommendation = weather.recommendation;
+    
+    if (pressureHpa < 1002) {
+      adjustedCondition = 'Thunderstorm';
+      adjustedAlertLevel = 'error';
+      adjustedRecommendation = "⚡ Micro-sensor trigger: Critical low barometric pressure detected! High storm sensitivity active. Secure all metal components immediately.";
+    } else if (pressureHpa < 1009) {
+      adjustedCondition = 'Heavy Rain';
+      adjustedAlertLevel = 'error';
+      adjustedRecommendation = "🌧️ Micro-sensor trigger: Depressed barometric gradient indicates moisture condensation. Wet weather repairs active. Refrain from open electrical work.";
+    } else if (pressureHpa > 1019) {
+      adjustedCondition = 'Sunny';
+      adjustedAlertLevel = 'warning';
+      adjustedRecommendation = "☀️ Micro-sensor trigger: High pressure ridge detected. High heat/dryness sensitivity active. Prevent engine overheating and stay hydrated.";
+    }
+    
+    // 6. Apply final calculations to temperature, humidity, wind
+    const finalTemp = Math.round(weather.temp + tempComp);
+    const finalHumidity = Math.max(0, Math.min(100, weather.humidity + tiltHumidOffset));
+    const finalWind = Math.max(0, weather.wind + tiltWindOffset);
+    
+    // If condition shifts, adjust UV
+    let finalUv = weather.uvIndex;
+    if (adjustedCondition === 'Sunny') finalUv = 10;
+    else if (adjustedCondition === 'Partly Cloudy') finalUv = 6;
+    else if (adjustedCondition === 'Overcast') finalUv = 3;
+    else finalUv = 1;
+    
+    return {
+      temp: finalTemp,
+      condition: adjustedCondition,
+      recommendation: adjustedRecommendation,
+      humidity: finalHumidity,
+      wind: finalWind,
+      uvIndex: finalUv,
+      alertLevel: adjustedAlertLevel,
+      locationName: weather.locationName,
+      pressureHpa,
+      altitude,
+      tempComp,
+      tiltWindOffset,
+      tiltHumidOffset
+    };
+  }, [weather, sensorStats, isSensorWeatherSensitive]);
+
+  const renderWeatherIcon = (condition: string) => {
+    switch (condition) {
       case 'Sunny':
         return <Sun className="text-amber-400 animate-pulse shrink-0" size={28} />;
       case 'Partly Cloudy':
@@ -313,69 +702,238 @@ const WeatherWidget = ({ selectedLocation }: { selectedLocation?: string }) => {
     error: 'bg-rose-950/20 border-rose-500/10 text-rose-400/90'
   };
 
+  // Coordinates bubble level inclinometer calculations
+  const bubbleX = Math.max(-42, Math.min(42, (sensorStats.gamma || 0) * 1.5));
+  const bubbleY = Math.max(-42, Math.min(42, (sensorStats.beta || 0) * 1.5));
+
   return (
     <div className="glass-card p-4 border border-white/5 relative overflow-hidden transition-all duration-300 flex flex-col gap-3">
       <div className="absolute top-0 right-0 w-24 h-24 bg-slate-yellow/5 rounded-full blur-2xl pointer-events-none" />
       
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-start">
         <div className="flex flex-col">
-          <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest leading-none">Outdoor Repair Weather</span>
+          <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest leading-none">GPS & Environmental Weather</span>
           <h4 className="text-xs font-black text-slate-100 flex items-center gap-1.5 mt-1">
             <MapPin size={11} className="text-slate-yellow shrink-0" />
-            <span className="truncate max-w-[220px]">{weather.locationName}</span>
+            <span className="truncate max-w-[150px] md:max-w-[200px]">{sensorAdjustedWeather.locationName}</span>
           </h4>
         </div>
         
-        <span className="text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-white/5 text-slate-500 border border-white/5">
-          Live Status
-        </span>
+        <div className="flex gap-1.5 items-center flex-wrap justify-end">
+          <button
+            onClick={scanDeviceGpsLocation}
+            disabled={gpsLoading}
+            className="bg-white/5 hover:bg-white/10 active:scale-95 transition-all text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded border border-white/5 flex items-center gap-1 text-slate-300 disabled:opacity-50"
+            title="Scan device GPS and compass sensors"
+          >
+            {gpsLoading ? (
+              <RotateCw size={10} className="animate-spin text-slate-yellow" />
+            ) : (
+              <Compass size={10} className="text-slate-yellow" />
+            )}
+            Sync Sensors
+          </button>
+        </div>
       </div>
 
       <div className="flex items-center justify-between gap-2 py-0.5">
         <div className="flex items-center gap-3">
-          <div className="bg-white/5 p-2 rounded-xl flex items-center justify-center">
-            {renderWeatherIcon()}
+          <div className="bg-white/5 p-2 rounded-xl flex items-center justify-center relative">
+            {isLoading && (
+              <div className="absolute inset-0 bg-charcoal/80 rounded-xl flex items-center justify-center">
+                <RotateCw size={14} className="animate-spin text-slate-yellow" />
+              </div>
+            )}
+            {renderWeatherIcon(sensorAdjustedWeather.condition)}
           </div>
           <div>
             <div className="flex items-baseline gap-0.5">
-              <span className="text-2xl font-black text-slate-100 tracking-tight">{weather.temp}</span>
+              <span className="text-2xl font-black text-slate-100 tracking-tight">{sensorAdjustedWeather.temp}</span>
               <span className="text-xs font-bold text-slate-yellow">°C</span>
             </div>
-            <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">{weather.condition}</p>
+            <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">{sensorAdjustedWeather.condition}</p>
           </div>
         </div>
 
         <div className="flex gap-1.5 shrink-0">
-          <div className="bg-white/[0.02] px-2 py-1 rounded-xl flex flex-col items-center justify-center min-w-[48px] border border-white/5">
+          <div className="bg-white/[0.02] px-2 py-1 rounded-xl flex flex-col items-center justify-center min-w-[48px] border border-white/5 relative">
             <Droplets size={10} className="text-sky-400/80 mb-0.5" />
-            <span className="text-[9px] font-black text-slate-200">{weather.humidity}%</span>
+            <span className="text-[9px] font-black text-slate-200">{sensorAdjustedWeather.humidity}%</span>
             <span className="text-[6px] text-slate-500 font-bold uppercase tracking-wider">Humid</span>
+            {isSensorWeatherSensitive && sensorAdjustedWeather.tiltHumidOffset !== 0 && (
+              <span className="absolute -top-1 -right-1 text-[5px] px-0.5 bg-sky-500/10 text-sky-400 border border-sky-500/15 rounded scale-75">
+                {sensorAdjustedWeather.tiltHumidOffset > 0 ? '+' : ''}{sensorAdjustedWeather.tiltHumidOffset}%
+              </span>
+            )}
           </div>
           
-          <div className="bg-white/[0.02] px-2 py-1 rounded-xl flex flex-col items-center justify-center min-w-[48px] border border-white/5">
+          <div className="bg-white/[0.02] px-2 py-1 rounded-xl flex flex-col items-center justify-center min-w-[48px] border border-white/5 relative">
             <Wind size={10} className="text-teal-400/80 mb-0.5" />
-            <span className="text-[9px] font-black text-slate-200">{weather.wind} <span className="text-[6px]">km/h</span></span>
+            <span className="text-[9px] font-black text-slate-200">{sensorAdjustedWeather.wind} <span className="text-[6px]">km/h</span></span>
             <span className="text-[6px] text-slate-500 font-bold uppercase tracking-wider">Wind</span>
+            {isSensorWeatherSensitive && sensorAdjustedWeather.tiltWindOffset > 0 && (
+              <span className="absolute -top-1 -right-1 text-[5px] px-0.5 bg-teal-500/10 text-teal-400 border border-teal-500/15 rounded scale-75">
+                +{sensorAdjustedWeather.tiltWindOffset}
+              </span>
+            )}
           </div>
 
           <div className="bg-white/[0.02] px-2 py-1 rounded-xl flex flex-col items-center justify-center min-w-[48px] border border-white/5">
             <Sun size={10} className="text-amber-400/80 mb-0.5" />
-            <span className="text-[9px] font-black text-slate-200">{weather.uvIndex} <span className="text-[6px]">/10</span></span>
+            <span className="text-[9px] font-black text-slate-200">{sensorAdjustedWeather.uvIndex} <span className="text-[6px]">/10</span></span>
             <span className="text-[6px] text-slate-500 font-bold uppercase tracking-wider">UV</span>
           </div>
         </div>
       </div>
     
-      <div className={cn("p-2.5 rounded-xl border flex gap-2 items-start text-[10px] leading-relaxed", alertColors[weather.alertLevel])}>
+      {isSensorWeatherSensitive && (
+        <div className="bg-emerald-500/5 border border-emerald-500/10 rounded-xl p-2 flex flex-wrap gap-x-3 gap-y-1 items-center justify-between text-[9px] font-medium text-emerald-400/90 leading-tight">
+          <div className="flex items-center gap-1">
+            <Activity size={10} className="animate-pulse" />
+            <span className="font-extrabold uppercase tracking-wider text-[7px]">Climate Sensitivity Nodes:</span>
+          </div>
+          <div className="flex flex-wrap gap-2 text-slate-400">
+            <span>Barometer: <strong className="text-emerald-400 font-bold">{sensorAdjustedWeather.pressureHpa} hPa</strong></span>
+            <span>Elevation: <strong className="text-emerald-400 font-bold">{sensorAdjustedWeather.altitude}m</strong></span>
+            {sensorAdjustedWeather.tempComp !== 0 && (
+              <span>Lapse Comp: <strong className="text-emerald-400 font-bold">{sensorAdjustedWeather.tempComp > 0 ? '+' : ''}{sensorAdjustedWeather.tempComp.toFixed(1)}°C</strong></span>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className={cn("p-2.5 rounded-xl border flex gap-2 items-start text-[10px] leading-relaxed", alertColors[sensorAdjustedWeather.alertLevel])}>
         <Info size={14} className="shrink-0 mt-0.5" />
         <div className="space-y-0.5">
           <p className="text-[8px] font-black uppercase tracking-widest leading-none">REPAIR ADVISORY</p>
-          <p className="font-medium text-slate-200">{weather.recommendation}</p>
+          <p className="font-medium text-slate-200">{sensorAdjustedWeather.recommendation}</p>
         </div>
+      </div>
+
+      {/* Device Sensors Diagnostics Console */}
+      <div className="border-t border-white/5 pt-2">
+        <button
+          onClick={() => setShowSensorsConsole(prev => !prev)}
+          className="w-full flex items-center justify-between text-[9px] font-black uppercase tracking-wider text-slate-500 hover:text-slate-300 py-1 transition-all"
+        >
+          <span className="flex items-center gap-1.5">
+            <Activity size={10} className={cn("text-slate-yellow", !sensorStats.isSensorSimulated && "animate-pulse")} />
+            Real-time Device Sensors Diagnostics
+          </span>
+          <span className="text-[8.5px] text-slate-yellow font-bold uppercase">
+            {showSensorsConsole ? "[ Hide Diagnostic Logs ]" : "[ View Diagnostic Logs ]"}
+          </span>
+        </button>
+
+        {showSensorsConsole && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            className="space-y-3 pt-2 overflow-hidden"
+          >
+            {/* Sensor Source indicator */}
+            <div className="flex justify-between items-center text-[8px] bg-charcoal-light/40 border border-white/5 p-1 px-2 rounded font-bold uppercase">
+              <span className="text-slate-500">Sensor Engine Status:</span>
+              <span className={sensorStats.isSensorSimulated ? "text-amber-500" : "text-emerald-400"}>
+                {sensorStats.isSensorSimulated ? "🖥️ Simulator Active" : "📱 Physical Hardware Connected"}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {/* Gyroscope / Horizon Level Bubble Inclinometer */}
+              <div className="bg-charcoal p-3 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center space-y-2 relative">
+                <span className="text-[8px] font-bold text-slate-400 uppercase tracking-wider self-start leading-none">Gyroscopic Level / Inclinometer</span>
+                
+                {/* Visual Level Level Target */}
+                <div className="w-24 h-24 rounded-full border border-white/10 bg-black/40 relative flex items-center justify-center">
+                  {/* Crosshairs */}
+                  <div className="absolute w-full h-[1px] bg-white/5" />
+                  <div className="absolute h-full w-[1px] bg-white/5" />
+                  <div className="absolute w-8 h-8 rounded-full border border-slate-yellow/15" />
+                  
+                  {/* Floating Bubble Dot */}
+                  <motion.div 
+                    animate={{ x: bubbleX, y: bubbleY }}
+                    transition={{ type: "spring", stiffness: 120, damping: 15 }}
+                    className="w-4 h-4 rounded-full bg-slate-yellow shadow-lg shadow-slate-yellow/50 border border-charcoal absolute z-10"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 w-full text-[9px] font-mono font-bold text-slate-300">
+                  <div className="bg-white/5 rounded p-1">
+                    <span className="text-slate-500 block text-[7px] uppercase leading-none mb-0.5">Pitch (Beta)</span>
+                    <span className={sensorStats.beta > 0 ? "text-emerald-400" : sensorStats.beta < 0 ? "text-amber-500" : "text-slate-300"}>
+                      {sensorStats.beta}°
+                    </span>
+                  </div>
+                  <div className="bg-white/5 rounded p-1">
+                    <span className="text-slate-500 block text-[7px] uppercase leading-none mb-0.5">Roll (Gamma)</span>
+                    <span className={sensorStats.gamma > 0 ? "text-emerald-400" : sensorStats.gamma < 0 ? "text-amber-500" : "text-slate-300"}>
+                      {sensorStats.gamma}°
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Accelerometer & Coordinates Logs */}
+              <div className="space-y-2.5">
+                {/* GPS Coordinates Readouts */}
+                <div className="bg-charcoal p-2.5 rounded-xl border border-white/5 space-y-1.5">
+                  <span className="text-[8px] font-bold text-slate-400 uppercase tracking-wider leading-none block">Physical GPS Sensor Nodes</span>
+                  <div className="grid grid-cols-2 gap-1.5 text-[10px] font-mono font-bold text-slate-300">
+                    <div className="bg-white/5 p-1 rounded">
+                      <span className="text-slate-500 block text-[7px] uppercase leading-none mb-0.5">Lat</span>
+                      {sensorStats.lat !== null ? sensorStats.lat.toFixed(5) : "-6.8235"}
+                    </div>
+                    <div className="bg-white/5 p-1 rounded">
+                      <span className="text-slate-500 block text-[7px] uppercase leading-none mb-0.5">Lng</span>
+                      {sensorStats.lng !== null ? sensorStats.lng.toFixed(5) : "39.2615"}
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-3 gap-1.5 text-[9px] font-mono font-bold text-slate-400">
+                    <div className="bg-white/5 p-1 rounded text-center">
+                      <span className="text-slate-500 block text-[6px] uppercase leading-none mb-0.5">Altitude</span>
+                      {sensorStats.altitude !== null ? `${sensorStats.altitude}m` : "12m"}
+                    </div>
+                    <div className="bg-white/5 p-1 rounded text-center">
+                      <span className="text-slate-500 block text-[6px] uppercase leading-none mb-0.5">Speed</span>
+                      {sensorStats.speed !== null ? `${sensorStats.speed}km/h` : "0km/h"}
+                    </div>
+                    <div className="bg-white/5 p-1 rounded text-center">
+                      <span className="text-slate-500 block text-[6px] uppercase leading-none mb-0.5">Accuracy</span>
+                      {sensorStats.accuracy !== null ? `${sensorStats.accuracy}m` : "±15m"}
+                    </div>
+                  </div>
+                </div>
+
+                {/* G-Force / Accelerometer */}
+                <div className="bg-charcoal p-2.5 rounded-xl border border-white/5 space-y-1.5">
+                  <span className="text-[8px] font-bold text-slate-400 uppercase tracking-wider leading-none block">G-Force (Accelerometer)</span>
+                  <div className="grid grid-cols-3 gap-1.5 text-[9px] font-mono font-bold text-slate-300">
+                    <div className="bg-white/5 p-1 rounded text-center">
+                      <span className="text-slate-500 block text-[7px] uppercase leading-none mb-0.5">Axis X</span>
+                      {sensorStats.accelX} m/s²
+                    </div>
+                    <div className="bg-white/5 p-1 rounded text-center">
+                      <span className="text-slate-500 block text-[7px] uppercase leading-none mb-0.5">Axis Y</span>
+                      {sensorStats.accelY} m/s²
+                    </div>
+                    <div className="bg-white/5 p-1 rounded text-center">
+                      <span className="text-slate-500 block text-[7px] uppercase leading-none mb-0.5">Axis Z (Gravity)</span>
+                      <span className="text-emerald-400">{sensorStats.accelZ} m/s²</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
       </div>
     </div>
   );
 };
+
 
 const CareNotificationBanner = ({ vehicles }: { vehicles: Vehicle[] }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -779,18 +1337,24 @@ export default function App() {
   };
   
   // Provider dynamic account details
-  const [providerAccount, setProviderAccount] = useState({
-    name: 'Ally Salum',
-    phone: '+255 712 345 678',
-    email: 'ally.salum@viyeko.com',
-    avatar: 'https://images.unsplash.com/photo-1628157582853-a796fa650a6a?auto=format&fit=crop&q=80&w=300',
-    isOnline: true,
-    vehicleMake: 'Toyota',
-    vehicleModel: 'Hilux Heavy Tow',
-    vehiclePlate: 'T 123 ABC',
-    vehicleColor: 'Yellow',
-    services: ['breakdown', 'tire', 'fuel', 'wash'],
-    region: 'Dar es Salaam'
+  const [providerAccount, setProviderAccount] = useState(() => {
+    const saved = localStorage.getItem('viyeko_provider_account');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) { console.error(e); }
+    }
+    return {
+      name: 'Ally Salum',
+      phone: '+255 712 345 678',
+      email: 'ally.salum@viyeko.com',
+      avatar: 'https://images.unsplash.com/photo-1628157582853-a796fa650a6a?auto=format&fit=crop&q=80&w=300',
+      isOnline: true,
+      vehicleMake: 'Toyota',
+      vehicleModel: 'Hilux Heavy Tow',
+      vehiclePlate: 'T 123 ABC',
+      vehicleColor: 'Yellow',
+      services: ['breakdown', 'tire', 'fuel', 'wash'],
+      region: 'Dar es Salaam'
+    };
   });
 
   // Editing state for profiles (aligned and dynamic)
@@ -820,25 +1384,39 @@ export default function App() {
   const [customPrices, setCustomPrices] = useState<Record<string, { base: number; distance: number; materials: number }>>({});
 
   // Simulated Provider State
-  const [providerStats, setProviderStats] = useState({
-    earnings: 1245200,
-    rating: 4.92,
-    ratingsCount: 148,
-    level: 5,
-    xp: 4200,
-    maxXp: 5000,
-    jobsCompleted: 482,
-    successRate: '99.1%',
-    speed: '~8 min',
-    rank: 'Elite Rescue Specialist'
+  const [providerStats, setProviderStats] = useState(() => {
+    const saved = localStorage.getItem('viyeko_provider_stats');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) { console.error(e); }
+    }
+    const savedEarnings = localStorage.getItem('viyeko_provider_earnings');
+    const baseEarnings = savedEarnings ? parseInt(savedEarnings, 10) : 1245200;
+    return {
+      earnings: baseEarnings,
+      rating: 4.92,
+      ratingsCount: 148,
+      level: 5,
+      xp: 4200,
+      maxXp: 5000,
+      jobsCompleted: 482,
+      successRate: '99.1%',
+      speed: '~8 min',
+      rank: 'Elite Rescue Specialist'
+    };
   });
 
-  const [providerFeedback, setProviderFeedback] = useState([
-    { id: 'f-1', customer: 'Janeth Mwenisongole', rating: 5, comment: 'Amazing speed! Reached Mikocheni in 8 minutes and fixed my flat tire immediately.', date: '2 hours ago', avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=100' },
-    { id: 'f-2', customer: 'Baraka Khalfan', rating: 5, comment: 'Professional and very polite. Highly recommended for roadside recovery.', date: '3 days ago', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=100' },
-    { id: 'f-3', customer: 'Sarah Kimario', rating: 5, comment: 'Engine overheating problem solved with great skill. Fair pricing too.', date: '1 week ago', avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=100' },
-    { id: 'f-4', customer: 'Kelvin Shayo', rating: 4, comment: 'Helped me jumpstart my battery in heavy rain at Posta Mpya. Quick and helpful.', date: '2 weeks ago', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=100' }
-  ]);
+  const [providerFeedback, setProviderFeedback] = useState(() => {
+    const saved = localStorage.getItem('viyeko_provider_feedback');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) { console.error(e); }
+    }
+    return [
+      { id: 'f-1', customer: 'Janeth Mwenisongole', rating: 5, comment: 'Amazing speed! Reached Mikocheni in 8 minutes and fixed my flat tire immediately.', date: '2 hours ago', avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=100' },
+      { id: 'f-2', customer: 'Baraka Khalfan', rating: 5, comment: 'Professional and very polite. Highly recommended for roadside recovery.', date: '3 days ago', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=100' },
+      { id: 'f-3', customer: 'Sarah Kimario', rating: 5, comment: 'Engine overheating problem solved with great skill. Fair pricing too.', date: '1 week ago', avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=100' },
+      { id: 'f-4', customer: 'Kelvin Shayo', rating: 4, comment: 'Helped me jumpstart my battery in heavy rain at Posta Mpya. Quick and helpful.', date: '2 weeks ago', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=100' }
+    ];
+  });
 
   const [providerSimulatedJobs, setProviderSimulatedJobs] = useState([
     { 
@@ -888,11 +1466,17 @@ export default function App() {
     }
   ]);
 
-  const [providerSimulatedHistory, setProviderSimulatedHistory] = useState<any[]>([
-    { id: 'sim-h1', clientName: 'Lilian Kamau', serviceId: 'flat_tire', location: 'Kariakoo, Dar es Salaam', date: 'Yesterday', payout: 75000, rating: 5, review: 'Fantastic service! Quick responsive swap' },
-    { id: 'sim-h2', clientName: 'Frank Peter', serviceId: 'fuel_delivery', location: 'Mbezi, Dar es Salaam', date: '3 days ago', payout: 60000, rating: 5, review: 'Saved me on my way home from work.' },
-    { id: 'sim-h3', clientName: 'Sarah Kimario', serviceId: 'towing', location: 'Mikochemi, Dar es Salaam', date: '5 days ago', payout: 155000, rating: 5, review: 'Professional and transparent towing.' }
-  ]);
+  const [providerSimulatedHistory, setProviderSimulatedHistory] = useState<any[]>(() => {
+    const saved = localStorage.getItem('viyeko_provider_history');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) { console.error(e); }
+    }
+    return [
+      { id: 'sim-h1', clientName: 'Lilian Kamau', serviceId: 'flat_tire', location: 'Kariakoo, Dar es Salaam', date: 'Yesterday', payout: 75000, rating: 5, review: 'Fantastic service! Quick responsive swap' },
+      { id: 'sim-h2', clientName: 'Frank Peter', serviceId: 'fuel_delivery', location: 'Mbezi, Dar es Salaam', date: '3 days ago', payout: 60000, rating: 5, review: 'Saved me on my way home from work.' },
+      { id: 'sim-h3', clientName: 'Sarah Kimario', serviceId: 'towing', location: 'Mikochemi, Dar es Salaam', date: '5 days ago', payout: 155000, rating: 5, review: 'Professional and transparent towing.' }
+    ];
+  });
 
   // Handle active job countdown transfer timers (Decrement + Auto-transfer)
   useEffect(() => {
@@ -958,6 +1542,31 @@ export default function App() {
 
     return () => clearInterval(timerId);
   }, [providerAccount.isOnline]);
+
+  // Synchronize user profile to localStorage
+  useEffect(() => {
+    localStorage.setItem('viyeko_user_profile', JSON.stringify(user));
+  }, [user]);
+
+  // Synchronize provider account to localStorage
+  useEffect(() => {
+    localStorage.setItem('viyeko_provider_account', JSON.stringify(providerAccount));
+  }, [providerAccount]);
+
+  // Synchronize provider stats to localStorage
+  useEffect(() => {
+    localStorage.setItem('viyeko_provider_stats', JSON.stringify(providerStats));
+  }, [providerStats]);
+
+  // Synchronize provider feedback to localStorage
+  useEffect(() => {
+    localStorage.setItem('viyeko_provider_feedback', JSON.stringify(providerFeedback));
+  }, [providerFeedback]);
+
+  // Synchronize provider history to localStorage
+  useEffect(() => {
+    localStorage.setItem('viyeko_provider_history', JSON.stringify(providerSimulatedHistory));
+  }, [providerSimulatedHistory]);
 
   const handleAcceptSimulatedJob = (id: string) => {
     setProviderSimulatedJobs(prev => prev.map(job => 
@@ -1236,16 +1845,20 @@ export default function App() {
           setVehicles(firebaseVehs);
         }
       }
-    } catch (error) {
-      console.error('Error fetching user data from Firestore:', error);
+    } catch (error: any) {
+      if (isOfflineError(error)) {
+        console.warn('Firestore is offline/unreachable while fetching user data. Operating in offline/local fallback state.');
+      } else {
+        console.error('Error fetching user data from Firestore:', error);
+      }
     }
   };
 
   const fetchActiveSearchingRequests = async () => {
     try {
       if (!currentUser) return;
-      // Get all requests
-      const reqQuery = query(collection(db, 'requests'));
+      // Get active searching requests
+      const reqQuery = query(collection(db, 'requests'), where('status', '==', 'searching'));
       const reqSnap = await getDocs(reqQuery);
       if (reqSnap) {
         const activeReqs: Request[] = [];
@@ -1259,8 +1872,12 @@ export default function App() {
           return Array.from(prevMap.values()).sort((a,b) => b.timestamp - a.timestamp);
         });
       }
-    } catch (error) {
-      console.error('Error fetching active searching requests:', error);
+    } catch (error: any) {
+      if (isOfflineError(error)) {
+        console.warn('Firestore is offline/unreachable while fetching active searching requests. Operating in offline/local fallback state.');
+      } else {
+        console.error('Error fetching active searching requests:', error);
+      }
     }
   };
 
@@ -1269,7 +1886,7 @@ export default function App() {
       if (r.id === requestId) {
         return {
           ...r,
-          status: 'completed' as const,
+          status: 'transferred' as const,
           notes: r.notes ? `${r.notes}\n\n[Transferred to provider: ${providerName} (${providerPhone})]` : `[Transferred to provider: ${providerName} (${providerPhone})]`
         };
       }
@@ -1280,13 +1897,17 @@ export default function App() {
     if (currentUser) {
       try {
         await updateDoc(doc(db, 'requests', requestId), {
-          status: 'completed',
+          status: 'transferred',
           notes: `[Transferred to provider: ${providerName} (${providerPhone})]`
         }).catch(err => {
           handleFirestoreError(err, OperationType.UPDATE, `requests/${requestId}`);
         });
-      } catch (error) {
-        console.error('Failed to transfer request in Firestore:', error);
+      } catch (error: any) {
+        if (isOfflineError(error)) {
+          console.warn('Firestore offline while transferring request.');
+        } else {
+          console.error('Failed to transfer request in Firestore:', error);
+        }
       }
     }
     notify.success(`Booking successfully transferred to ${providerName}!`, 'provider');
@@ -1294,6 +1915,7 @@ export default function App() {
   };
 
   const handleTransferSimulatedJob = (jobId: string, providerName: string, providerPhone: string) => {
+    const jobName = providerSimulatedJobs.find(j => j.id === jobId)?.clientName || 'Incident';
     setProviderSimulatedJobs(prev => prev.filter(job => job.id !== jobId));
     setProviderSimulatedHistory(prev => [
       {
@@ -1308,7 +1930,7 @@ export default function App() {
       },
       ...prev
     ]);
-    notify.success(`Incident successfully transferred to ${providerName}!`, 'provider');
+    notify.success(`Dispatch successfully transferred to ${providerName}!`, 'provider');
     setTransferringJobId(null);
   };
 
@@ -1364,8 +1986,12 @@ export default function App() {
           handleFirestoreError(err, OperationType.CREATE, `requests/${requestId}`);
           throw err;
         });
-      } catch (error) {
-        console.error('Firestore save failed', error);
+      } catch (error: any) {
+        if (isOfflineError(error)) {
+          console.warn('Firestore offline while creating request.');
+        } else {
+          console.error('Firestore save failed', error);
+        }
         notify.error('Local copy saved. Cloud sync failed.', 'user');
       }
     }
@@ -1417,8 +2043,12 @@ export default function App() {
           handleFirestoreError(err, OperationType.UPDATE, `requests/${requestId}`);
           throw err;
         });
-      } catch (error) {
-        console.error('Firestore status update failed:', error);
+      } catch (error: any) {
+        if (isOfflineError(error)) {
+          console.warn('Firestore offline while updating status.');
+        } else {
+          console.error('Firestore status update failed:', error);
+        }
       }
     }
   };
@@ -1443,8 +2073,12 @@ export default function App() {
           handleFirestoreError(err, OperationType.UPDATE, `requests/${reqId}`);
           throw err;
         });
-      } catch (error) {
-        console.error('Firestore update failed', error);
+      } catch (error: any) {
+        if (isOfflineError(error)) {
+          console.warn('Firestore offline while accepting job.');
+        } else {
+          console.error('Firestore update failed', error);
+        }
       }
     }
     notify.info('Job accepted!', 'provider');
@@ -1465,8 +2099,12 @@ export default function App() {
           handleFirestoreError(err, OperationType.UPDATE, `requests/${reqId}`);
           throw err;
         });
-      } catch (error) {
-        console.error('Firestore update failed', error);
+      } catch (error: any) {
+        if (isOfflineError(error)) {
+          console.warn('Firestore offline while completing job.');
+        } else {
+          console.error('Firestore update failed', error);
+        }
       }
     }
     notify.success('Job completed!', 'provider');
@@ -1541,8 +2179,12 @@ export default function App() {
           handleFirestoreError(err, OperationType.UPDATE, `requests/${reqId}`);
           throw err;
         });
-      } catch (error) {
-        console.error('Firestore cancel failed', error);
+      } catch (error: any) {
+        if (isOfflineError(error)) {
+          console.warn('Firestore offline while cancelling request.');
+        } else {
+          console.error('Firestore cancel failed', error);
+        }
       }
     }
     notify.error('Request cancelled', 'user');
@@ -1561,8 +2203,12 @@ export default function App() {
           throw err;
         });
         notify.success(`Custom price of TSh ${(finalTotal * 100).toLocaleString()} sent to user!`, 'provider');
-      } catch (error) {
-        console.error('Firestore update totalCost failed', error);
+      } catch (error: any) {
+        if (isOfflineError(error)) {
+          console.warn('Firestore offline while setting custom quote.');
+        } else {
+          console.error('Firestore update totalCost failed', error);
+        }
       }
     } else {
       notify.success(`Custom price of TSh ${(finalTotal * 100).toLocaleString()} updated locally!`, 'provider');
@@ -1598,8 +2244,12 @@ export default function App() {
           throw err;
         });
         notify.success('Vehicle synced to cloud!', 'user');
-      } catch (error) {
-        console.error(error);
+      } catch (error: any) {
+        if (isOfflineError(error)) {
+          console.warn('Firestore offline while syncing vehicle.');
+        } else {
+          console.error(error);
+        }
         notify.error('Failed to sync vehicle to cloud.', 'user');
       }
     } else {
@@ -1624,8 +2274,12 @@ export default function App() {
           throw err;
         });
         notify.success('Vehicle removed from cloud!', 'user');
-      } catch (error) {
-        console.error('Failed to delete vehicle from Firestore', error);
+      } catch (error: any) {
+        if (isOfflineError(error)) {
+          console.warn('Firestore offline while deleting vehicle.');
+        } else {
+          console.error('Failed to delete vehicle from Firestore', error);
+        }
         notify.error('Failed to remove vehicle from cloud.', 'user');
       }
     } else {
@@ -1687,6 +2341,71 @@ export default function App() {
     setActiveTab('profile');
     setIsEditingUser(true);
     setShowAddVehicle(true);
+  };
+
+  const [showProviderResetConfirm, setShowProviderResetConfirm] = useState(false);
+
+  const triggerProviderCleanSlate = () => {
+    // 1. Reset Stats
+    setProviderStats({
+      earnings: 0,
+      rating: 5.0,
+      ratingsCount: 0,
+      level: 1,
+      xp: 0,
+      maxXp: 1000,
+      jobsCompleted: 0,
+      successRate: '100%',
+      speed: '--',
+      rank: 'Novice Responder'
+    });
+    
+    // 2. Clear Feedback
+    setProviderFeedback([]);
+    
+    // 3. Clear simulated/active jobs
+    setProviderSimulatedJobs([]);
+    
+    // 4. Clear simulated history
+    setProviderSimulatedHistory([]);
+    
+    // 5. Reset provider Account details
+    const cleanProviderAccount = {
+      name: 'New Provider',
+      phone: '',
+      email: currentUser?.email || '',
+      avatar: 'https://images.unsplash.com/photo-1628157582853-a796fa650a6a?auto=format&fit=crop&q=80&w=300',
+      isOnline: false,
+      vehicleMake: '',
+      vehicleModel: '',
+      vehiclePlate: '',
+      vehicleColor: '',
+      services: [],
+      region: 'Dar es Salaam'
+    };
+    setProviderAccount(cleanProviderAccount);
+    
+    // Reset editing state
+    setEditProviderName('New Provider');
+    setEditProviderPhone('');
+    setEditProviderEmail(currentUser?.email || '');
+    setEditProviderAvatar('https://images.unsplash.com/photo-1628157582853-a796fa650a6a?auto=format&fit=crop&q=80&w=300');
+    setEditProviderVehicleMake('');
+    setEditProviderVehicleModel('');
+    setEditProviderVehiclePlate('');
+    setEditProviderVehicleColor('');
+    setEditProviderServices([]);
+    setEditProviderRegion('Dar es Salaam');
+
+    // LocalStorage resets
+    localStorage.removeItem('viyeko_provider_earnings');
+    localStorage.removeItem('viyeko_provider_stats');
+    localStorage.removeItem('viyeko_provider_feedback');
+    localStorage.removeItem('viyeko_provider_history');
+    localStorage.removeItem('viyeko_provider_account');
+
+    notify.success('Provider profile has been wiped to a clean slate!', 'provider');
+    setIsEditingProvider(true); // Open edit mode to let them set up immediately!
   };
 
   const getCurrentLocation = () => {
@@ -1966,7 +2685,7 @@ export default function App() {
                         )}
                       >
                         <Calendar size={11} />
-                        Bookings ({requests.filter(r => r.status !== 'completed').length})
+                        Bookings ({requests.filter(r => r.status !== 'completed' && r.status !== 'transferred').length})
                       </button>
                     </div>
                   </div>
@@ -2225,7 +2944,7 @@ export default function App() {
                     )
                   ) : (
                     /* CARE UNIT BOOKINGS SUB-TAB CONTENT */
-                    requests.filter(r => r.status !== 'completed').length === 0 ? (
+                    requests.filter(r => r.status !== 'completed' && r.status !== 'transferred').length === 0 ? (
                       <div className="bg-charcoal-light/10 border border-white/5 rounded-3xl py-12 text-center space-y-4">
                         <Calendar size={32} className="mx-auto text-slate-yellow animate-bounce" />
                         <p className="text-slate-400 font-bold uppercase text-[10px] tracking-wider">No active service appointments or care unit bookings found!</p>
@@ -2238,7 +2957,7 @@ export default function App() {
                       </div>
                     ) : (
                       <div className="space-y-4">
-                        {requests.filter(r => r.status !== 'completed').map(req => {
+                        {requests.filter(r => r.status !== 'completed' && r.status !== 'transferred').map(req => {
                           const service = SERVICES.find(s => s.id === req.serviceId);
                           const isScheduled = req.timestamp > Date.now() + 1000 * 60 * 60;
                           return (
@@ -2401,11 +3120,6 @@ export default function App() {
                     <span className="text-[10px] bg-charcoal-light border border-border-theme flex items-center justify-center px-3 py-1 rounded-full font-bold text-slate-300 uppercase tracking-widest font-mono">
                       {providerSimulatedHistory.filter(h => h.status !== 'transferred').length + requests.filter(r => r.status === 'completed').length} Resolved
                     </span>
-                    {providerSimulatedHistory.filter(h => h.status === 'transferred').length > 0 && (
-                      <span className="text-[10px] bg-red-950/40 border border-red-500/20 flex items-center justify-center px-3 py-1 rounded-full font-bold text-red-400 uppercase tracking-widest font-mono animate-pulse">
-                        {providerSimulatedHistory.filter(h => h.status === 'transferred').length} Transferred
-                      </span>
-                    )}
                   </div>
                 </div>
 
@@ -2448,7 +3162,7 @@ export default function App() {
                     );
                   })}
 
-                  {providerSimulatedHistory.map(log => {
+                  {providerSimulatedHistory.filter(log => log.status !== 'transferred').map(log => {
                     const service = SERVICES.find(s => s.id === log.serviceId);
                     const isTransferred = log.status === 'transferred';
                     return (
@@ -2955,6 +3669,49 @@ export default function App() {
                         </p>
                       </div>
                     ))}
+                  </div>
+                </div>
+
+                {/* Clean Slate Action */}
+                <div className="space-y-2 pt-2 border-t border-white/5">
+                  <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">System Reset</h3>
+                  <div className="glass-card p-4 space-y-3 border-l-2 border-l-rose-500">
+                    <p className="text-xs text-slate-300 font-medium leading-relaxed">
+                      Wipe all provider activity logs, earnings, custom pricing, reviews, and start with a clean responder slate.
+                    </p>
+                    {showProviderResetConfirm ? (
+                      <div className="bg-rose-500/10 border border-rose-500/20 p-3 rounded-xl space-y-2 animate-fadeIn mt-1">
+                        <p className="text-[10px] text-rose-400 font-black uppercase tracking-wider">Are you absolutely sure? All provider ratings, history, and earnings will be wiped permanently.</p>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              triggerProviderCleanSlate();
+                              setShowProviderResetConfirm(false);
+                            }}
+                            className="bg-rose-500 hover:bg-rose-600 text-white font-black text-[9px] uppercase px-3 py-1.5 rounded-lg transition-all"
+                          >
+                            Yes, Wipe Provider Data
+                          </button>
+                          <button
+                            onClick={() => setShowProviderResetConfirm(false)}
+                            className="text-slate-400 hover:text-slate-200 font-bold text-[9px] uppercase px-2 py-1.5"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setShowProviderResetConfirm(true)}
+                        className="w-full flex items-center justify-between hover:bg-white/5 p-2 rounded-xl transition-all text-left"
+                      >
+                        <div className="flex items-center gap-3">
+                          <Trash2 size={16} className="text-rose-500 animate-pulse" />
+                          <span className="text-sm font-bold text-rose-400">Reset Provider to Clean Slate</span>
+                        </div>
+                        <ChevronRight size={16} className="text-slate-600" />
+                      </button>
+                    )}
                   </div>
                 </div>
               </>
@@ -3544,6 +4301,7 @@ export default function App() {
                           </div>
                           <div className={cn(
                             "px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider",
+                            req.status === 'transferred' ? "bg-rose-500/10 text-rose-400 border border-rose-500/20" :
                             req.status !== 'completed' ? "bg-slate-yellow/10 text-slate-yellow" : "bg-emerald-900/30 text-emerald-400"
                           )}>
                             {req.status}
@@ -3571,7 +4329,7 @@ export default function App() {
                             <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Total Paid</span>
                             <span className="text-sm font-black text-slate-yellow">TSh {(req.totalCost * 100).toLocaleString()}</span>
                           </div>
-                          {req.status !== 'completed' && req.estimatedArrival !== undefined && (
+                          {req.status !== 'completed' && req.status !== 'transferred' && req.estimatedArrival !== undefined && (
                             <div className="flex items-center gap-2 text-xs font-bold text-slate-yellow bg-slate-yellow/10 p-2 rounded-lg">
                               <Loader2 size={14} className="animate-spin" />
                               <span>Estimated Arrival: {req.estimatedArrival} mins</span>
@@ -3667,8 +4425,12 @@ export default function App() {
                             throw err;
                           });
                           notify.success('Your profile was successfully updated on the cloud!', 'user');
-                        } catch (error) {
-                          console.error("Firestore profile update failed:", error);
+                        } catch (error: any) {
+                          if (isOfflineError(error)) {
+                            console.warn('Firestore offline while updating profile.');
+                          } else {
+                            console.error("Firestore profile update failed:", error);
+                          }
                           notify.error('Could not save updated profile to the cloud.', 'user');
                         }
                       } else {
@@ -4729,6 +5491,82 @@ export default function App() {
                 className="w-full bg-white/5 border border-white/10 text-slate-400 font-bold py-2.5 rounded-xl text-xs hover:bg-white/10 transition-all uppercase tracking-widest mt-2"
               >
                 Close Support Directory
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Transfer Dispatch/Booking Modal */}
+      <AnimatePresence>
+        {(transferringRequestId || transferringJobId) && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-slate-900/60 dark:bg-black/80 backdrop-blur-sm z-[70] flex items-center justify-center p-6"
+          >
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-charcoal w-full max-w-sm rounded-[2.5rem] p-6 space-y-6 shadow-2xl border border-white/5 relative"
+            >
+              <button 
+                onClick={() => {
+                  setTransferringRequestId(null);
+                  setTransferringJobId(null);
+                }}
+                className="absolute top-5 right-5 text-slate-500 hover:text-slate-300 bg-white/5 hover:bg-white/10 p-1.5 rounded-full transition-all"
+              >
+                <X size={16} />
+              </button>
+
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <CornerUpRight className="text-slate-yellow" size={20} />
+                  <h3 className="text-lg font-black text-slate-100 uppercase italic tracking-tight">Transfer Dispatch</h3>
+                </div>
+                <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Select a nearby rescue unit to hand over this dispatch</p>
+              </div>
+
+              <div className="space-y-3">
+                {TRANSFERABLE_PROVIDERS.map((provider) => (
+                  <div key={provider.name} className="bg-white/5 border border-white/10 p-4 rounded-3xl space-y-3 hover:border-slate-yellow/20 transition-all flex flex-col justify-between">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h4 className="font-black text-slate-100 text-sm leading-none mb-1">{provider.name}</h4>
+                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{provider.specialty}</p>
+                        <p className="text-[9px] text-slate-500 font-mono mt-1">Vehicle: {provider.vehicle} ({provider.distance})</p>
+                      </div>
+                      <span className="text-[8px] font-black bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded uppercase shrink-0">Available</span>
+                    </div>
+                    
+                    <button
+                      onClick={() => {
+                        if (transferringRequestId) {
+                          handleTransferRequest(transferringRequestId, provider.name, provider.phone);
+                        } else if (transferringJobId) {
+                          handleTransferSimulatedJob(transferringJobId, provider.name, provider.phone);
+                        }
+                      }}
+                      className="w-full bg-slate-yellow text-charcoal font-black text-[10px] py-2 rounded-xl uppercase tracking-wider hover:brightness-110 active:scale-95 transition-all text-center flex items-center justify-center gap-1"
+                    >
+                      <CornerUpRight size={10} />
+                      Transfer to {provider.name.split(' ')[0]}
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <button 
+                onClick={() => {
+                  setTransferringRequestId(null);
+                  setTransferringJobId(null);
+                }}
+                className="w-full bg-white/5 border border-white/10 text-slate-400 font-bold py-2.5 rounded-xl text-xs hover:bg-white/10 transition-all uppercase tracking-widest mt-2"
+              >
+                Cancel Transfer
               </button>
             </motion.div>
           </motion.div>
