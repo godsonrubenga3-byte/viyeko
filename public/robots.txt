@@ -1,0 +1,26 @@
+# VIYEKO Search Crawler Configuration
+# For Google, Bing, WhatsApp, LinkedIn, and Facebook Bots
+
+User-agent: *
+Allow: /
+Allow: /prototype
+Allow: /og_image.jpg
+
+# Specific crawl rate rules for social media engines
+User-agent: Facebot
+Allow: /
+
+User-agent: facebookexternalhit
+Allow: /
+
+User-agent: Twitterbot
+Allow: /
+
+User-agent: WhatsApp
+Allow: /
+
+User-agent: LinkedInBot
+Allow: /
+
+# Sitemap path
+Sitemap: https://viyeko.com/sitemap.xml

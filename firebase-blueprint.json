@@ -59,6 +59,21 @@
         "totalCost": { "type": "number" }
       },
       "required": ["id", "uid", "serviceId", "status", "location", "timestamp", "vehicleInfo", "totalCost"]
+    },
+    "Lead": {
+      "title": "Waitlist Lead",
+      "description": "Information collected from interested users prior to launch.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "vehicleType": { "type": "string" },
+        "region": { "type": "string" },
+        "createdAt": { "type": "integer" }
+      },
+      "required": ["id", "name", "email", "phone", "vehicleType", "region", "createdAt"]
     }
   },
   "firestore": {
@@ -73,6 +88,10 @@
     "/requests/{requestId}": {
       "schema": "Request",
       "description": "Roadside assistance and service requests."
+    },
+    "/leads/{leadId}": {
+      "schema": "Lead",
+      "description": "Waitlist details for early access users."
     }
   }
 }

@@ -121,5 +121,23 @@ service cloud.firestore {
              (!data.keys().hasAny(['notes']) || (data.notes is string && data.notes.size() <= 1000)) &&
              (!data.keys().hasAny(['estimatedArrival']) || (data.estimatedArrival is int && data.estimatedArrival >= 0));
     }
+
+    // Pre-launch Leads / Waitlist Rules
+    match /leads/{leadId} {
+      allow create: if isValidId(leadId) && isValidLead(request.resource.data);
+      allow get, list: if isAdmin();
+    }
+
+    function isValidLead(data) {
+      return data.keys().hasAll(['id', 'name', 'email', 'phone', 'vehicleType', 'region', 'createdAt']) &&
+             data.keys().size() == 7 &&
+             data.id is string && data.id.size() <= 128 &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             data.email is string && data.email.size() > 0 && data.email.size() <= 150 &&
+             data.phone is string && data.phone.size() > 0 && data.phone.size() <= 30 &&
+             data.vehicleType is string && data.vehicleType.size() <= 50 &&
+             data.region is string && data.region.size() <= 100 &&
+             data.createdAt is int;
+    }
   }
 }

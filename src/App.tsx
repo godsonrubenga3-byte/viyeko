@@ -48,6 +48,7 @@ import { SERVICES, ServiceType, Request, Service, User as UserType, Vehicle } fr
 import { cn } from './lib/utils';
 import { format } from 'date-fns';
 import { Toaster, toast } from 'sonner';
+import LandingPage from './components/LandingPage';
 
 import { 
   auth, 
@@ -370,7 +371,7 @@ const WeatherWidget = ({
             }
           }
         } catch (err) {
-          console.error("Geocoding failed, falling back to local weather data", err);
+          console.warn("Geocoding failed, falling back to local weather data", err);
         }
       }
       
@@ -449,7 +450,7 @@ const WeatherWidget = ({
             return;
           }
         } catch (err) {
-          console.error("Live weather forecast fetch failed, falling back to local weather data", err);
+          console.warn("Live weather forecast fetch failed, falling back to local weather data", err);
         }
       }
       
@@ -1143,6 +1144,28 @@ const AvatarUploadZone: React.FC<AvatarUploadZoneProps> = ({ currentAvatar, onAv
 };
 
 export default function App() {
+  const [route, setRoute] = useState<'landing' | 'prototype'>(() => {
+    const path = window.location.pathname;
+    return path === '/prototype' ? 'prototype' : 'landing';
+  });
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const path = window.location.pathname;
+      setRoute(path === '/prototype' ? 'prototype' : 'landing');
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  const navigateToRoute = (newRoute: 'landing' | 'prototype') => {
+    setRoute(newRoute);
+    const newPath = newRoute === 'prototype' ? '/prototype' : '/';
+    if (window.location.pathname !== newPath) {
+      window.history.pushState(null, '', newPath);
+    }
+  };
+
   const [activeTab, setActiveTab] = useState<'home' | 'care' | 'history' | 'profile'>('home');
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [requests, setRequests] = useState<Request[]>([]);
@@ -2442,6 +2465,15 @@ export default function App() {
     loc.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  if (route === 'landing') {
+    return (
+      <>
+        <LandingPage onAccessPrototype={() => navigateToRoute('prototype')} />
+        <Toaster position="top-center" richColors />
+      </>
+    );
+  }
+
   return (
     <div className="h-screen bg-charcoal flex flex-col md:flex-row w-full sm:max-w-lg md:max-w-6xl mx-auto shadow-2xl relative overflow-hidden font-sans transition-colors duration-300 edge-lighting">
       <Toaster position="top-center" richColors />
@@ -2485,6 +2517,13 @@ export default function App() {
               )}
             >
               {isProviderMode ? "Provider Mode" : "User Mode"}
+            </button>
+            
+            <button 
+              onClick={() => navigateToRoute('landing')}
+              className="px-3 py-1.5 md:w-full md:text-center rounded-full text-[10px] font-black uppercase tracking-widest transition-all bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10"
+            >
+              ← Exit to Landing
             </button>
             
             {isProviderMode && (
