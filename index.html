@@ -4,6 +4,32 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     
+    <!-- Cache Control & Anti-Caching for Development/Live Pre-launch updates -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    
+    <script>
+      // Clear browser's Cache Storage and Session Storage on manual page reload
+      try {
+        if (window.performance && window.performance.getEntriesByType) {
+          const navigationEntries = window.performance.getEntriesByType('navigation');
+          if (navigationEntries.length > 0 && navigationEntries[0].type === 'reload') {
+            if ('caches' in window) {
+              caches.keys().then(function(names) {
+                for (let name of names) {
+                  caches.delete(name);
+                }
+              });
+            }
+            sessionStorage.clear();
+          }
+        }
+      } catch (e) {
+        console.warn('Cache clearing script failed silently:', e);
+      }
+    </script>
+    
     <!-- Primary SEO Meta Tags -->
     <title>VIYEKO - Premium On-Demand Roadside Assistance & Vehicle Care Tanzania</title>
     <meta name="description" content="Stranded in Tanzania? VIYEKO provides instant on-demand roadside assistance, towing, tire swaps, battery jumpstarts, fuel delivery, and complete mobile care in Dar es Salaam, Arusha, Dodoma & Zanzibar." />

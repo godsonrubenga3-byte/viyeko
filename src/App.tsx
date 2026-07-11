@@ -2465,10 +2465,10 @@ export default function App() {
     loc.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  if (route === 'landing') {
+  if (true) {
     return (
       <>
-        <LandingPage onAccessPrototype={() => navigateToRoute('prototype')} />
+        <LandingPage />
         <Toaster position="top-center" richColors />
       </>
     );
