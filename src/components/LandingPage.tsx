@@ -32,39 +32,219 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 
-// Define rescuers info for the landing page explanation
-const EXPERT_PROVIDERS = [
+// Define Dar es Salaam Key Zones Density info (up to 50 providers each)
+const DAR_KEY_ZONES = [
   {
-    name: 'Francis Masanja',
-    phone: '+255747746619',
-    specialty: 'Heavy towing & vehicle rescue',
-    vehicle: 'Flatbed Tow Truck',
-    distance: '1.5 km',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=300',
-    experience: '8+ Years',
-    bio: 'Specialist in complex highway recovery, heavy flatbed logistics, and vehicle extraction. Certified master of mechanical recovery.'
+    id: 'kinondoni',
+    name_en: "Kinondoni",
+    name_sw: "Kinondoni",
+    providers: 50,
+    eta: "8 - 12 mins",
+    services_en: "Heavy towing, flatbed recovery, fast mechanical diagnostic",
+    services_sw: "Kuvuta magari, uokoaji wa flatbed, utambuzi wa haraka wa kiufundi",
+    description_en: "High density of rapid-response flatbeds positioned near Morocco, Oysterbay, and Masaki.",
+    description_sw: "Idadi kubwa ya malori ya kukokota ya haraka yaliyopo karibu na Morocco, Oysterbay, na Masaki."
   },
   {
-    name: 'Godson Martin',
-    phone: '+255750057757',
-    specialty: 'Emergency logistics & roadside assist',
-    vehicle: 'Mechanical Response Van',
-    distance: '2.8 km',
-    avatar: 'https://images.unsplash.com/photo-1628157582853-a796fa650a6a?auto=format&fit=crop&q=80&w=300',
-    experience: '6 Years',
-    bio: 'Expert in mobile diagnostics, electrical repairs, and rapid roadside logistics. Known for resolving critical breakdowns under 15 minutes.'
+    id: 'kigamboni',
+    name_en: "Kigamboni",
+    name_sw: "Kigamboni",
+    providers: 45,
+    eta: "10 - 15 mins",
+    services_en: "Tire replacement, fuel delivery, mobile electrical repairs",
+    services_sw: "Kubadilisha matairi, kuleta mafuta, ukarabati wa umeme wa rununu",
+    description_en: "Continuous patrols along the ferry and bridge access areas for instant tourist assistance.",
+    description_sw: "Doria endelevu kando ya kivuko na maeneo ya daraja kwa msaada wa haraka wa watalii na wakaazi."
   },
   {
-    name: 'Michael Temu',
-    phone: '+255751234567',
-    specialty: 'Tyres & battery jumpstart expert',
-    vehicle: 'Quick Rescue Motorcycle',
-    distance: '4.1 km',
-    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=300',
-    experience: '5 Years',
-    bio: 'Mobile tyre service and high-speed electrical jumpstarts. Michael operates a fast response motorcycle to bypass heavy traffic in Dar es Salaam.'
+    id: 'ilala',
+    name_en: "Ilala / CBD",
+    name_sw: "Ilala / CBD",
+    providers: 48,
+    eta: "7 - 10 mins",
+    services_en: "Heavy towing, battery jumpstarts, locksmith / key lockout",
+    services_sw: "Kuvuta magari makubwa, kuamsha betri, msaada wa funguo",
+    description_en: "Specialized rapid-response motorcycles equipped for heavy gridlock maneuverability.",
+    description_sw: "Pikipiki maalum za uokoaji wa haraka zilizowekwa kwa ajili ya kupita kwenye msongamano mkubwa."
+  },
+  {
+    id: 'ubungo',
+    name_en: "Ubungo",
+    name_sw: "Ubungo",
+    providers: 50,
+    eta: "9 - 14 mins",
+    services_en: "Commercial fleet towing, brake fluid assist, radiator repairs",
+    services_sw: "Kuvuta magari makubwa ya biashara, msaada wa breki, matengenezo ya redieta",
+    description_en: "Heavy-duty truck focus near the main terminal and Morogoro Road transit corridors.",
+    description_sw: "Uzingatiaji wa magari makubwa ya kubeba mizigo karibu na stendi kuu na barabara ya Morogoro."
+  },
+  {
+    id: 'temeke',
+    name_en: "Temeke",
+    name_sw: "Temeke",
+    providers: 42,
+    eta: "12 - 16 mins",
+    services_en: "Engine cooling fixes, tire swap mechanics, fuel dispatch",
+    services_sw: "Urekebishaji wa mfumo wa baridi wa injini, kubadilisha tairi, mafuta ya dharura",
+    description_en: "Strategically distributed recovery vans supporting industrial and port logistics routes.",
+    description_sw: "Magari ya uokoaji yaliyosambazwa kimkakati kusaidia njia za viwandani na bandarini."
+  },
+  {
+    id: 'mbezi',
+    name_en: "Mbezi / Tegeta",
+    name_sw: "Mbezi / Tegeta",
+    providers: 46,
+    eta: "11 - 15 mins",
+    services_en: "4x4 extraction, general towing, emergency diagnostics",
+    services_sw: "Uokoaji wa gari 4x4, kuvuta magari, utambuzi wa dharura",
+    description_en: "Vetted offroad experts equipped with winches and recovery gear for unpaved terrain.",
+    description_sw: "Wataalamu wa magari ya milimani wenye winchi na vifaa kwa ajili ya barabara za vumbi."
   }
 ];
+
+// Complete English and Swahili Translation Dictionaries
+const TRANSLATIONS = {
+  en: {
+    badge: "Pre-Launch Priority Waitlist Active",
+    heroTitle: "Viyeko - Tanzania's number one roadside assistance, coming soon in Dar es Salaam",
+    heroDesc: "VIYEKO is the next-generation digital garage and on-demand roadside assistance dispatcher. From tire swaps in Kigamboni to complex heavy towing in Mikocheni, connect with local vetted specialists equipped with precision GPS, live barometer telemetry, and transparent pricing.",
+    secureBtn: "Secure Early Access",
+    joinBtn: "Join Priority Waitlist",
+    vetted: "100% Vetted",
+    eta: "Avg. 12 Min Arrival",
+    regions: "Dar es Salaam & Regions",
+    telemetryTitle: "Live Dispatch Telemetry",
+    tshActive: "TSh Active",
+    onWay: "On the Way",
+    gps: "Heading / GPS",
+    pressure: "Alt / Pressure",
+    featuresBadge: "Precision Roadside Logistics",
+    featuresTitle: "The Modern Rescue Ecosystem",
+    featuresDesc: "We took everything frustrating about traditional roadside towing and rebuild it from the soil up for Tanzania's growing automotive network.",
+    feat1Title: "On-Demand Dispatches",
+    feat1Desc: "Flatbed towing, emergency diesel/petrol delivery, tire dynamic swaps, battery jumpstarts, and complete mobile detailing. Ordered in 3 taps.",
+    feat2Title: "Digital Service Garage",
+    feat2Desc: "Add your fleet vehicles, track complete maintenance dates, calculate exact service costs, and plan future checkups through our digital ledger.",
+    feat3Title: "Telemetry Sync",
+    feat3Desc: "High-precision GPS sensors coupled with localized barometric pressure calculators adjust ETA and mechanics tools dynamically to current climate and altitude.",
+    providersBadge: "Vetted, Reliable, Responsive",
+    providersTitle: "Dar es Salaam Key Zones",
+    providersDesc: "UP TO 50 certified providers strategically stationed in each key zone of Dar es Salaam, ensuring rapid emergency logistics & rapid turnaround times.",
+    ctaTitle: "Ready to secure Priority early access?",
+    ctaDesc: "Get priority dispatcher queues, zero-fee towing for the first month, and early updates. Register your vehicle now on our secure waitlist.",
+    ctaBtn: "Go to Registration Page",
+    backBtn: "Back to Overview",
+    formTitle: "Secure Early Access",
+    formSub: "Enter your vehicle and dispatch details below",
+    fullName: "Full Name *",
+    emailAddr: "Email Address *",
+    phoneNum: "Phone Number (WhatsApp Preferred) *",
+    vehicleClass: "Vehicle Class",
+    yourRegion: "Your Region",
+    registerBtn: "Register Securely",
+    registering: "Recording Lead...",
+    successTitle: "You're on the list!",
+    successDesc: "Asante sana! We've secured your priority early-access spot. Your submission was logged in our Turso cloud database. You will be notified the minute our certified rescuers go live.",
+    anotherBtn: "Register another vehicle",
+    backHomeBtn: "Back to Overview",
+    headerFeatures: "Features",
+    headerZones: "Zones",
+    headerLeads: "Leads Table",
+    activeLabel: "Active Providers",
+    avgEta: "Avg. ETA",
+    services: "Services",
+    allRegions: "All Regions (Mikoa Yote)",
+    allVehicles: "All Vehicle Classes (Madaraja Yote)",
+    dbConsole: "Database Leads Console",
+    registeredResponses: "Registered Responses",
+    realtimeTurso: "Real-time Turso Database synchronization engine",
+    refreshDb: "Refresh Database",
+    syncing: "Syncing...",
+    newLead: "Register New Lead",
+    searchPlaceholder: "Search name, email, or phone...",
+    dbEntries: "Database Entries",
+    recordsFound: "Records Found",
+    leadNameCol: "Lead Name / Client",
+    contactCol: "Contact details",
+    vehicleTypeCol: "Vehicle Type",
+    regionCol: "Region",
+    registeredAtCol: "Registered At",
+    noRecords: "No matching database records",
+    adjustFilters: "Try adjusting your filters or search keywords.",
+    devNotice: "Developer Notice",
+    fallbackNotice: "This registration was written to the local SQLite fallback database because `TURSO_CONNECTION_URL` is not configured in secrets. Fill it in to sync to your production database."
+  },
+  sw: {
+    badge: "Orodha ya Kipaumbele ya Kabla ya Uzinduzi Iko Wazi",
+    heroTitle: "Viyeko - Huduma namba moja ya msaada wa dharura barabarani Tanzania, inakuja hivi karibuni Dar es Salaam",
+    heroDesc: "VIYEKO ni kizazi kijacho cha gereji za kidijitali na huduma ya haraka ya msaada wa dharura barabarani. Kuanzia kubadilisha tairi Kigamboni hadi kuvuta magari makubwa Mikocheni, ungana na wataalamu waliothibitishwa wenye GPS sahihi, telemetry ya barometa na bei wazi kabisa.",
+    secureBtn: "Jiunge na Orodha Mapema",
+    joinBtn: "Jiunge na Orodha Sasa",
+    vetted: "Wataalamu 100%",
+    eta: "Kufika Chini ya Dakika 12",
+    regions: "Dar es Salaam na Mikoa",
+    telemetryTitle: "Mawasiliano ya Moja kwa Moja",
+    tshActive: "TSh Inatumika",
+    onWay: "Njia Kuja",
+    gps: "Mwelekeo / GPS",
+    pressure: "Kimo / Shinikizo",
+    featuresBadge: "Uratibu Madhubuti wa Barabarani",
+    featuresTitle: "Mfumo wa Kisasa wa Uokoaji",
+    featuresDesc: "Tulichukua changamoto zote za zamani za uokoaji barabarani na kuzijenga upya kwa ajili ya mtandao unaokua wa magari nchini Tanzania.",
+    feat1Title: "Huduma za Papo kwa Papo",
+    feat1Desc: "Kuvuta magari makubwa, kuleta mafuta ya dharura, kubadilisha tairi, kuamsha betri na huduma kamili ya ukarabati. Agiza kwa miguso 3 tu.",
+    feat2Title: "Gereji ya Kidijitali",
+    feat2Desc: "Sajili magari yako yote, fuatilia tarehe za matengenezo, hesabu gharama sahihi za huduma na panga ukaguzi ujao kupitia rejesta yetu ya kidijitali.",
+    feat3Title: "Uoanishaji wa Sensor",
+    feat3Desc: "Vihisi vyenye uwezo mkubwa wa GPS vikiunganishwa na vikokotoo vya shinikizo hurekebisha muda wa kufika na zana za kiufundi kulingana na hali ya hewa na mwinuko.",
+    providersBadge: "Waliothibitishwa, Waaminifu, Wepesi",
+    providersTitle: "Kanda Kuu za Dar es Salaam",
+    providersDesc: "Hadi watoa huduma 50 waliothibitishwa katika kila kanda kuu ya Dar es Salaam, wakihakikisha uratibu wa dharura wa haraka na ufanisi mkubwa.",
+    ctaTitle: "Uko tayari kupata nafasi ya Kipaumbele mapema?",
+    ctaDesc: "Pata kipaumbele cha dharura, huduma ya kuvuta gari bure mwezi wa kwanza, na taarifa za mapema. Sajili gari lako sasa kwenye orodha yetu salama.",
+    ctaBtn: "Nenda Kwenye Ukurasa wa Usajili",
+    backBtn: "Rudi Nyuma",
+    formTitle: "Jiunge na Orodha Mapema",
+    formSub: "Weka taarifa za gari lako na mawasiliano hapa chini",
+    fullName: "Majina Kamili *",
+    emailAddr: "Barua Pepe *",
+    phoneNum: "Namba ya Simu (WhatsApp inapendelewa) *",
+    vehicleClass: "Daraja la Gari",
+    yourRegion: "Mkoa Wako",
+    registerBtn: "Sajili Sasa kwa Usalama",
+    registering: "Inatuma Taarifa...",
+    successTitle: "Umeshajumuishwa kwenye Orodha!",
+    successDesc: "Asante sana! Tumekuhifadhia nafasi yako ya kipaumbele ya mapema. Taarifa zako zimesajiliwa kwenye hifadhidata yetu ya Turso. Utajulishwa mara tu wataalamu wetu wanapoanza kufanya kazi.",
+    anotherBtn: "Sajili gari lingine",
+    backHomeBtn: "Rudi Kwenye Maelezo ya Jumla",
+    headerFeatures: "Sifa Kuu",
+    headerZones: "Kanda Zetu",
+    headerLeads: "Orodha ya Leads",
+    activeLabel: "Wataalamu Waliopo",
+    avgEta: "Muda wa Kufika",
+    services: "Huduma",
+    allRegions: "Mikoa Yote",
+    allVehicles: "Madaraja Yote ya Magari",
+    dbConsole: "Dashibodi ya Leads za Hifadhidata",
+    registeredResponses: "Majibu Yaliyosajiliwa",
+    realtimeTurso: "Mfumo wa maingiliano wa hifadhidata wa Turso wa muda halisi",
+    refreshDb: "Sasisha Hifadhidata",
+    syncing: "Inasawazisha...",
+    newLead: "Sajili Lead Mpya",
+    searchPlaceholder: "Tafuta jina, barua pepe, au namba...",
+    dbEntries: "Maingizo ya Database",
+    recordsFound: "Kumbukumbu Zilizopatikana",
+    leadNameCol: "Jina la Lead / Mteja",
+    contactCol: "Mawasiliano",
+    vehicleTypeCol: "Daraja la Gari",
+    regionCol: "Mkoa",
+    registeredAtCol: "Muda wa Kusajiliwa",
+    noRecords: "Hakuna kumbukumbu zinazolingana",
+    adjustFilters: "Jaribu kubadilisha vichujio au maneno ya utafutaji.",
+    devNotice: "Taarifa kwa Msanidi Programu",
+    fallbackNotice: "Usajili huu umeandikwa kwenye hifadhidata ya dharura ya SQLite kwa sababu `TURSO_CONNECTION_URL` haijawekwa kwenye siri. Weka siri hiyo ili kusawazisha na hifadhidata yako ya uzalishaji."
+  }
+};
 
 const POPULAR_REGIONS = [
   "Dar es Salaam",
@@ -89,6 +269,10 @@ export default function LandingPage() {
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     const stored = localStorage.getItem('viyeko-theme');
     return (stored as 'light' | 'dark') || 'dark';
+  });
+  const [lang, setLang] = useState<'en' | 'sw'>(() => {
+    const stored = localStorage.getItem('viyeko-lang');
+    return (stored as 'en' | 'sw') || 'en';
   });
 
   const [formData, setFormData] = useState({
@@ -141,6 +325,10 @@ export default function LandingPage() {
   useEffect(() => {
     localStorage.setItem('viyeko-theme', theme);
   }, [theme]);
+
+  useEffect(() => {
+    localStorage.setItem('viyeko-lang', lang);
+  }, [lang]);
 
   const toggleTheme = () => {
     setTheme(prev => prev === 'dark' ? 'light' : 'dark');
@@ -245,12 +433,38 @@ export default function LandingPage() {
           <div className="flex items-center gap-4">
             {view === 'home' && (
               <>
-                <a href="#features" className={`text-xs font-bold uppercase tracking-wider transition-colors hidden md:inline-block ${secondaryText} hover:text-amber-500`}>Features</a>
-                <a href="#rescuers" className={`text-xs font-bold uppercase tracking-wider transition-colors hidden md:inline-block ${secondaryText} hover:text-amber-500`}>The Rescuers</a>
+                <a href="#features" className={`text-xs font-bold uppercase tracking-wider transition-colors hidden md:inline-block ${secondaryText} hover:text-amber-500`}>
+                  {TRANSLATIONS[lang].headerFeatures}
+                </a>
+                <a href="#zones" className={`text-xs font-bold uppercase tracking-wider transition-colors hidden md:inline-block ${secondaryText} hover:text-amber-500`}>
+                  {TRANSLATIONS[lang].headerZones}
+                </a>
               </>
             )}
 
-
+            {/* Language Switcher */}
+            <div className={`flex items-center rounded-xl p-0.5 border ${isDark ? 'border-white/10 bg-white/5' : 'border-slate-200 bg-slate-100'}`}>
+              <button
+                onClick={() => setLang('en')}
+                className={`text-[9px] font-black uppercase tracking-wider px-2.5 py-1.5 rounded-lg transition-all ${
+                  lang === 'en'
+                    ? (isDark ? 'bg-slate-yellow text-charcoal' : 'bg-amber-500 text-white')
+                    : (isDark ? 'text-slate-400 hover:text-slate-200' : 'text-slate-600 hover:text-slate-800')
+                }`}
+              >
+                EN
+              </button>
+              <button
+                onClick={() => setLang('sw')}
+                className={`text-[9px] font-black uppercase tracking-wider px-2.5 py-1.5 rounded-lg transition-all ${
+                  lang === 'sw'
+                    ? (isDark ? 'bg-slate-yellow text-charcoal' : 'bg-amber-500 text-white')
+                    : (isDark ? 'text-slate-400 hover:text-slate-200' : 'text-slate-600 hover:text-slate-800')
+                }`}
+              >
+                SW
+              </button>
+            </div>
             
             {/* Theme Toggler */}
             <button 
@@ -269,7 +483,7 @@ export default function LandingPage() {
                 id="header-waitlist-btn"
               >
                 <Zap size={11} />
-                <span>Secure Early Access</span>
+                <span>{TRANSLATIONS[lang].secureBtn}</span>
               </button>
             ) : view === 'register' ? (
               <button 
@@ -277,7 +491,7 @@ export default function LandingPage() {
                 className={`font-black text-[10px] uppercase tracking-wider py-2 px-4 rounded-xl transition-all duration-300 active:scale-95 flex items-center gap-1.5 ${isDark ? 'bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10' : 'bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200'}`}
               >
                 <ArrowLeft size={11} />
-                <span>Back to Home</span>
+                <span>{TRANSLATIONS[lang].backBtn}</span>
               </button>
             ) : (
               <button 
@@ -285,7 +499,7 @@ export default function LandingPage() {
                 className={`font-black text-[10px] uppercase tracking-wider py-2 px-4 rounded-xl transition-all duration-300 active:scale-95 flex items-center gap-1.5 ${isDark ? 'bg-slate-yellow/10 hover:bg-slate-yellow text-slate-yellow hover:text-charcoal border border-slate-yellow/20' : 'bg-amber-500 hover:bg-amber-600 text-white'}`}
               >
                 <Zap size={11} />
-                <span>Register</span>
+                <span>{TRANSLATIONS[lang].secureBtn}</span>
               </button>
             )}
           </div>
@@ -308,19 +522,23 @@ export default function LandingPage() {
                 <div className="flex-1 space-y-6 text-center md:text-left">
                   <div className={`inline-flex items-center gap-2 border text-[10px] font-black uppercase tracking-widest px-3.5 py-1.5 rounded-full ${isDark ? 'bg-slate-yellow/10 border-slate-yellow/20 text-slate-yellow' : 'bg-amber-500/10 border-amber-500/20 text-amber-600'}`}>
                     <Sparkles size={11} className="animate-spin text-amber-500" />
-                    <span>Pre-Launch Priority Waitlist Active</span>
+                    <span>{TRANSLATIONS[lang].badge}</span>
                   </div>
                   
-                  <h1 className={`text-4xl md:text-6xl font-black leading-[1.05] italic tracking-tight uppercase ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                    Stranded in <span className={brandYellow}>Tanzania?</span> <br />
-                    Meet Your Instant <br />
-                    Rescue Team.
+                  <h1 className={`text-3xl md:text-5xl lg:text-5xl font-black leading-[1.1] italic tracking-tight uppercase ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                    {lang === 'en' ? (
+                      <>
+                        Viyeko - Tanzania's <span className={brandYellow}>number one</span> roadside assistance, coming soon in dar es salaam
+                      </>
+                    ) : (
+                      <>
+                        Viyeko - Huduma namba <span className={brandYellow}>moja ya msaada</span> wa dharura barabarani Tanzania, inakuja hivi karibuni dar es salaam
+                      </>
+                    )}
                   </h1>
 
                   <p className={`text-sm md:text-base leading-relaxed max-w-lg font-medium ${secondaryText}`}>
-                    VIYEKO is the next-generation digital garage and on-demand roadside assistance dispatcher. 
-                    From tire swaps in Kigamboni to complex heavy towing in Mikocheni, connect with local vetted 
-                    specialists equipped with precision GPS, live barometer telemetry, and transparent pricing.
+                    {TRANSLATIONS[lang].heroDesc}
                   </p>
 
                   <div className="flex flex-col sm:flex-row items-center justify-center md:justify-start gap-4 pt-2">
@@ -328,7 +546,7 @@ export default function LandingPage() {
                       onClick={() => setView('register')}
                       className={`w-full sm:w-auto font-black text-xs uppercase tracking-widest px-8 py-4 rounded-2xl shadow-xl transition-all text-center flex items-center justify-center gap-2 group hover:scale-[1.02] ${isDark ? 'bg-slate-yellow text-charcoal shadow-slate-yellow/10 hover:shadow-slate-yellow/20' : 'bg-amber-500 text-white shadow-amber-500/10 hover:shadow-amber-500/20 hover:bg-amber-600'}`}
                     >
-                      <span>Secure Early Access</span>
+                      <span>{TRANSLATIONS[lang].secureBtn}</span>
                       <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
                     </button>
 
@@ -337,14 +555,14 @@ export default function LandingPage() {
                       className={`w-full sm:w-auto border font-black text-xs uppercase tracking-widest px-8 py-4 rounded-2xl transition-all text-center flex items-center justify-center gap-2 active:scale-95 ${isDark ? 'bg-white/5 border-white/10 hover:border-slate-yellow/30 text-white hover:bg-white/10' : 'bg-slate-100 border-slate-200 text-slate-800 hover:bg-slate-200'}`}
                     >
                       <Activity size={14} className={`${brandYellow} animate-pulse`} />
-                      <span>Join Priority Waitlist</span>
+                      <span>{TRANSLATIONS[lang].joinBtn}</span>
                     </button>
                   </div>
 
                   <div className="flex flex-wrap items-center justify-center md:justify-start gap-6 pt-4 text-xs font-bold text-slate-500 uppercase tracking-widest">
-                    <span className="flex items-center gap-1.5"><ShieldCheck size={14} className={brandYellow} /> 100% Vetted</span>
-                    <span className="flex items-center gap-1.5"><Clock size={14} className={brandYellow} /> Avg. 12 Min Arrival</span>
-                    <span className="flex items-center gap-1.5"><MapPin size={14} className={brandYellow} /> Dar es Salaam & Regions</span>
+                    <span className="flex items-center gap-1.5"><ShieldCheck size={14} className={brandYellow} /> {TRANSLATIONS[lang].vetted}</span>
+                    <span className="flex items-center gap-1.5"><Clock size={14} className={brandYellow} /> {TRANSLATIONS[lang].eta}</span>
+                    <span className="flex items-center gap-1.5"><MapPin size={14} className={brandYellow} /> {TRANSLATIONS[lang].regions}</span>
                   </div>
                 </div>
 
@@ -358,9 +576,9 @@ export default function LandingPage() {
                         <span className="w-2.5 h-2.5 bg-rose-500 rounded-full" />
                         <span className="w-2.5 h-2.5 bg-amber-500 rounded-full" />
                         <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full" />
-                        <span className="text-[9px] font-mono text-slate-400 font-bold ml-2 uppercase">Live Dispatch Telemetry</span>
+                        <span className="text-[9px] font-mono text-slate-400 font-bold ml-2 uppercase">{TRANSLATIONS[lang].telemetryTitle}</span>
                       </div>
-                      <span className={`text-[10px] font-mono font-black bg-emerald-500/10 text-emerald-500 px-2.5 py-0.5 rounded-full`}>TSh Active</span>
+                      <span className={`text-[10px] font-mono font-black bg-emerald-500/10 text-emerald-500 px-2.5 py-0.5 rounded-full`}>{TRANSLATIONS[lang].tshActive}</span>
                     </div>
 
                     {/* Simulated Live Rescue Box */}
@@ -369,9 +587,9 @@ export default function LandingPage() {
                         <div className="flex justify-between items-start">
                           <div>
                             <h4 className={`font-black text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>Francis Masanja</h4>
-                            <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Heavy Towing Specialist</p>
+                            <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">{lang === 'en' ? 'Heavy Towing Specialist' : 'Mtaalamu wa Kuvuta Magari Makubwa'}</p>
                           </div>
-                          <span className="text-[9px] font-black bg-emerald-500/10 text-emerald-500 px-2.5 py-0.5 rounded-full uppercase">On the Way</span>
+                          <span className="text-[9px] font-black bg-emerald-500/10 text-emerald-500 px-2.5 py-0.5 rounded-full uppercase">{TRANSLATIONS[lang].onWay}</span>
                         </div>
                         
                         <div className={`h-2 rounded-full overflow-hidden ${isDark ? 'bg-white/5' : 'bg-slate-200'}`}>
@@ -389,7 +607,7 @@ export default function LandingPage() {
                         <div className={`border p-3.5 rounded-2xl space-y-1 ${isDark ? 'bg-white/5 border-white/5' : 'bg-slate-50 border-slate-200'}`}>
                           <div className="flex items-center gap-1.5 text-slate-400">
                             <Compass size={12} className={brandYellow} />
-                            <span className="text-[8px] font-black uppercase tracking-wider">Heading / GPS</span>
+                            <span className="text-[8px] font-black uppercase tracking-wider">{TRANSLATIONS[lang].gps}</span>
                           </div>
                           <p className={`text-xs font-black font-mono ${isDark ? 'text-white' : 'text-slate-900'}`}>6° 48' S • 39° 17' E</p>
                         </div>
@@ -397,7 +615,7 @@ export default function LandingPage() {
                         <div className={`border p-3.5 rounded-2xl space-y-1 ${isDark ? 'bg-white/5 border-white/5' : 'bg-slate-50 border-slate-200'}`}>
                           <div className="flex items-center gap-1.5 text-slate-400">
                             <Activity size={12} className={`${brandYellow} animate-pulse`} />
-                            <span className="text-[8px] font-black uppercase tracking-wider">Alt / Pressure</span>
+                            <span className="text-[8px] font-black uppercase tracking-wider">{TRANSLATIONS[lang].pressure}</span>
                           </div>
                           <p className={`text-xs font-black font-mono ${isDark ? 'text-white' : 'text-slate-900'}`}>1,013 hPa (Sea Lvl)</p>
                         </div>
@@ -408,7 +626,7 @@ export default function LandingPage() {
                       onClick={() => setView('register')}
                       className={`w-full font-black text-[10px] py-3.5 rounded-2xl uppercase tracking-widest hover:brightness-110 active:scale-95 transition-all text-center flex items-center justify-center gap-2 shadow-lg ${isDark ? 'bg-slate-yellow text-charcoal shadow-slate-yellow/5' : 'bg-amber-500 text-white shadow-amber-500/5'}`}
                     >
-                      <span>Secure Early Access</span>
+                      <span>{TRANSLATIONS[lang].secureBtn}</span>
                       <ArrowRight size={11} />
                     </button>
                   </div>
@@ -419,10 +637,10 @@ export default function LandingPage() {
               <section id="features" className={`border-y py-20 px-6 ${isDark ? 'bg-white/2' : 'bg-slate-100/50'} ${borderTint}`}>
                 <div className="max-w-6xl mx-auto space-y-12">
                   <div className="text-center max-w-xl mx-auto space-y-3">
-                    <span className={`text-[10px] font-black uppercase tracking-widest ${brandYellow}`}>Precision Roadside Logistics</span>
-                    <h2 className={`text-3xl md:text-4xl font-black uppercase italic tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>The Modern Rescue Ecosystem</h2>
+                    <span className={`text-[10px] font-black uppercase tracking-widest ${brandYellow}`}>{TRANSLATIONS[lang].featuresBadge}</span>
+                    <h2 className={`text-3xl md:text-4xl font-black uppercase italic tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>{TRANSLATIONS[lang].featuresTitle}</h2>
                     <p className={`text-xs md:text-sm font-medium ${secondaryText}`}>
-                      We took everything frustrating about traditional roadside towing and rebuild it from the soil up for Tanzania's growing automotive network.
+                      {TRANSLATIONS[lang].featuresDesc}
                     </p>
                   </div>
 
@@ -431,9 +649,9 @@ export default function LandingPage() {
                       <div className={`w-12 h-12 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform ${isDark ? 'bg-slate-yellow/10 text-slate-yellow' : 'bg-amber-500/10 text-amber-500'}`}>
                         <Truck size={22} />
                       </div>
-                      <h3 className={`font-black text-lg uppercase tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>On-Demand Dispatches</h3>
+                      <h3 className={`font-black text-lg uppercase tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>{TRANSLATIONS[lang].feat1Title}</h3>
                       <p className={`text-xs leading-relaxed font-medium ${secondaryText}`}>
-                        Flatbed towing, emergency diesel/petrol delivery, tire dynamic swaps, battery jumpstarts, and complete mobile detailing. Ordered in 3 taps.
+                        {TRANSLATIONS[lang].feat1Desc}
                       </p>
                     </div>
 
@@ -441,9 +659,9 @@ export default function LandingPage() {
                       <div className={`w-12 h-12 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform ${isDark ? 'bg-slate-yellow/10 text-slate-yellow' : 'bg-amber-500/10 text-amber-500'}`}>
                         <Wrench size={22} />
                       </div>
-                      <h3 className={`font-black text-lg uppercase tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>Digital Service Garage</h3>
+                      <h3 className={`font-black text-lg uppercase tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>{TRANSLATIONS[lang].feat2Title}</h3>
                       <p className={`text-xs leading-relaxed font-medium ${secondaryText}`}>
-                        Add your fleet vehicles, track complete maintenance dates, calculate exact service costs, and plan future checkups through our digital ledger.
+                        {TRANSLATIONS[lang].feat2Desc}
                       </p>
                     </div>
 
@@ -451,78 +669,67 @@ export default function LandingPage() {
                       <div className={`w-12 h-12 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform ${isDark ? 'bg-slate-yellow/10 text-slate-yellow' : 'bg-amber-500/10 text-amber-500'}`}>
                         <Activity size={22} />
                       </div>
-                      <h3 className={`font-black text-lg uppercase tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>Telemetry Sync</h3>
+                      <h3 className={`font-black text-lg uppercase tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>{TRANSLATIONS[lang].feat3Title}</h3>
                       <p className={`text-xs leading-relaxed font-medium ${secondaryText}`}>
-                        High-precision GPS sensors coupled with localized barometric pressure calculators adjust ETA and mechanics tools dynamically to current climate and altitude.
+                        {TRANSLATIONS[lang].feat3Desc}
                       </p>
                     </div>
                   </div>
                 </div>
               </section>
 
-              {/* The Rescuers Section */}
-              <section id="rescuers" className="py-20 px-6 max-w-6xl mx-auto w-full space-y-12">
+              {/* Dar es Salaam Key Zones Section */}
+              <section id="zones" className="py-20 px-6 max-w-6xl mx-auto w-full space-y-12">
                 <div className="text-center max-w-xl mx-auto space-y-3">
-                  <span className={`text-[10px] font-black uppercase tracking-widest ${brandYellow}`}>Vetted, Reliable, Responsive</span>
-                  <h2 className={`text-3xl md:text-4xl font-black uppercase italic tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>Meet the Rescuers</h2>
+                  <span className={`text-[10px] font-black uppercase tracking-widest ${brandYellow}`}>{TRANSLATIONS[lang].providersBadge}</span>
+                  <h2 className={`text-3xl md:text-4xl font-black uppercase italic tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>{TRANSLATIONS[lang].providersTitle}</h2>
                   <p className={`text-xs md:text-sm font-medium ${secondaryText}`}>
-                    Trained and certified logistics experts ready to service your car anytime. Real people, premium vehicles, and precise performance metrics.
+                    {TRANSLATIONS[lang].providersDesc}
                   </p>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                  {EXPERT_PROVIDERS.map((provider) => (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {DAR_KEY_ZONES.map((zone) => (
                     <div 
-                      key={provider.name} 
-                      className={`border rounded-[2.5rem] p-6 space-y-5 transition-all flex flex-col justify-between ${cardBg} hover:border-amber-500/20`}
+                      key={zone.id} 
+                      className={`border rounded-[2.5rem] p-6 space-y-5 transition-all flex flex-col justify-between ${cardBg} hover:border-amber-500/20 group`}
                     >
                       <div className="space-y-4">
-                        <div className="flex items-center gap-4">
-                          <div className="relative">
-                            <img 
-                              src={provider.avatar} 
-                              alt={provider.name} 
-                              className={`w-14 h-14 rounded-full object-cover border-2 ${isDark ? 'border-slate-yellow' : 'border-amber-500'}`} 
-                              referrerPolicy="no-referrer"
-                            />
-                            <div className={`absolute -bottom-1 -right-1 rounded-full p-1 border ${isDark ? 'bg-slate-yellow text-charcoal border-charcoal' : 'bg-amber-500 text-white border-white'}`}>
-                              <Award size={8} className="stroke-[3]" />
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-transform group-hover:scale-110 ${isDark ? 'bg-slate-yellow/10 text-slate-yellow' : 'bg-amber-500/10 text-amber-500'}`}>
+                              <MapPin size={18} />
                             </div>
-                          </div>
-                          <div>
-                            <h3 className={`font-black text-base leading-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>{provider.name}</h3>
-                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{provider.specialty}</p>
-                            <div className="flex items-center gap-1 mt-0.5">
-                              <Star size={10} className="fill-amber-500 text-amber-500" />
-                              <Star size={10} className="fill-amber-500 text-amber-500" />
-                              <Star size={10} className="fill-amber-500 text-amber-500" />
-                              <Star size={10} className="fill-amber-500 text-amber-500" />
-                              <Star size={10} className="fill-amber-500 text-amber-500" />
-                              <span className="text-[9px] font-black font-mono ml-1">5.0 Rating</span>
+                            <div>
+                              <h3 className={`font-black text-base leading-tight uppercase ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                                {lang === 'en' ? zone.name_en : zone.name_sw}
+                              </h3>
+                              <p className="text-[10px] font-mono text-slate-500">Tanzania Grid Zone</p>
                             </div>
                           </div>
                         </div>
 
-                        <div className={`border-t border-b py-3 grid grid-cols-2 gap-4 text-center ${borderTint}`}>
-                          <div>
-                            <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest block">Response Vehicle</span>
-                            <span className={`text-[10px] font-black uppercase ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>{provider.vehicle}</span>
-                          </div>
-                          <div>
-                            <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest block">Experience</span>
-                            <span className={`text-[10px] font-black font-mono ${brandYellow}`}>{provider.experience}</span>
-                          </div>
+                        <div className="flex flex-wrap gap-2 pt-1">
+                          <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider ${
+                            isDark ? 'bg-slate-yellow/10 text-slate-yellow border border-slate-yellow/20' : 'bg-amber-500/10 text-amber-600 border border-amber-500/20'
+                          }`}>
+                            {zone.providers} {TRANSLATIONS[lang].activeLabel}
+                          </span>
+                          <span className="px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider bg-emerald-500/10 text-emerald-500 border border-emerald-500/10 flex items-center gap-1">
+                            <Clock size={10} />
+                            <span>{TRANSLATIONS[lang].avgEta}: {zone.eta}</span>
+                          </span>
                         </div>
 
-                        <p className={`text-xs leading-relaxed font-medium ${secondaryText}`}>
-                          "{provider.bio}"
+                        <p className={`text-xs leading-relaxed font-semibold ${isDark ? 'text-slate-300' : 'text-slate-800'}`}>
+                          {lang === 'en' ? zone.description_en : zone.description_sw}
                         </p>
-                      </div>
 
-                      <div className="pt-4 mt-auto">
-                        <div className={`p-3 rounded-2xl flex items-center justify-between text-[10px] font-bold ${isDark ? 'bg-white/5 text-slate-400' : 'bg-slate-100 text-slate-600'}`}>
-                          <span className="uppercase tracking-wider">Tanzania Region</span>
-                          <span className={`font-mono ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>{provider.distance} Away</span>
+                        <div className={`border-t pt-3 space-y-1.5 ${borderTint}`}>
+                          <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest block">{TRANSLATIONS[lang].services}</span>
+                          <p className="text-[10px] font-bold text-slate-500">
+                            {lang === 'en' ? zone.services_en : zone.services_sw}
+                          </p>
                         </div>
                       </div>
                     </div>
@@ -530,21 +737,29 @@ export default function LandingPage() {
                 </div>
               </section>
 
-              {/* Secure Call-To-Action Banner at the bottom instead of form */}
+              {/* Secure Call-To-Action Banner at the bottom */}
               <section className={`py-16 px-6 border-t ${borderTint} ${isDark ? 'bg-white/[0.01]' : 'bg-slate-50'}`}>
                 <div className="max-w-4xl mx-auto text-center space-y-6">
                   <h2 className={`text-3xl md:text-5xl font-black uppercase italic tracking-tight leading-none ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                    Ready to secure <span className={brandYellow}>Priority</span> early access?
+                    {lang === 'en' ? (
+                      <>
+                        Ready to secure <span className={brandYellow}>Priority</span> early access?
+                      </>
+                    ) : (
+                      <>
+                        Je, uko tayari kupata nafasi ya <span className={brandYellow}>Kipaumbele</span> mapema?
+                      </>
+                    )}
                   </h2>
                   <p className={`max-w-xl mx-auto text-sm font-medium ${secondaryText}`}>
-                    Get priority dispatcher queues, zero-fee towing for the first month, and early updates. Register your vehicle now on our secure waitlist.
+                    {TRANSLATIONS[lang].ctaDesc}
                   </p>
                   <div>
                     <button 
                       onClick={() => setView('register')}
                       className={`font-black text-xs uppercase tracking-widest px-10 py-4.5 rounded-2xl transition-all hover:scale-[1.02] shadow-lg ${isDark ? 'bg-slate-yellow text-charcoal shadow-slate-yellow/10 hover:bg-slate-yellow/90' : 'bg-amber-500 text-white shadow-amber-500/10 hover:bg-amber-600'}`}
                     >
-                      Go to Registration Page
+                      {TRANSLATIONS[lang].ctaBtn}
                     </button>
                   </div>
                 </div>
@@ -565,7 +780,7 @@ export default function LandingPage() {
                 className={`inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider mb-8 transition-colors ${secondaryText} hover:text-amber-500`}
               >
                 <ArrowLeft size={14} />
-                <span>Back to Overview</span>
+                <span>{TRANSLATIONS[lang].backBtn}</span>
               </button>
 
               <div className={`border rounded-[2.5rem] p-8 md:p-10 shadow-2xl relative overflow-hidden ${cardBg}`}>
@@ -580,9 +795,9 @@ export default function LandingPage() {
                       <CheckCircle2 size={32} className="stroke-[2.5]" />
                     </div>
                     <div className="space-y-2">
-                      <h3 className={`font-black text-2xl uppercase tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>You're on the list!</h3>
+                      <h3 className={`font-black text-2xl uppercase tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>{TRANSLATIONS[lang].successTitle}</h3>
                       <p className={`text-xs font-semibold leading-relaxed max-w-md mx-auto ${secondaryText}`}>
-                        Asante sana! We've secured your priority early-access spot. Your submission was logged in our Turso cloud database. You will be notified the minute our certified rescuers go live.
+                        {TRANSLATIONS[lang].successDesc}
                       </p>
                     </div>
 
@@ -590,9 +805,9 @@ export default function LandingPage() {
                       <div className={`max-w-md mx-auto p-3.5 rounded-2xl text-left border flex gap-3 text-xs ${isDark ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' : 'bg-amber-50/90 border-amber-200 text-amber-700'}`}>
                         <AlertCircle size={18} className="shrink-0 mt-0.5" />
                         <div>
-                          <p className="font-bold">Developer Notice</p>
+                          <p className="font-bold">{TRANSLATIONS[lang].devNotice}</p>
                           <p className="text-[10px] leading-relaxed opacity-90 mt-0.5">
-                            This registration was written to the local SQLite fallback database because `TURSO_CONNECTION_URL` is not configured in secrets. Fill it in to sync to your production database.
+                            {TRANSLATIONS[lang].fallbackNotice}
                           </p>
                         </div>
                       </div>
@@ -606,26 +821,26 @@ export default function LandingPage() {
                         }}
                         className={`flex-1 font-black text-xs py-4 rounded-2xl uppercase tracking-widest transition-all ${isDark ? 'bg-white/5 border border-white/10 hover:bg-white/10 text-white' : 'bg-slate-100 border border-slate-200 text-slate-800 hover:bg-slate-200'}`}
                       >
-                        Register another vehicle
+                        {TRANSLATIONS[lang].anotherBtn}
                       </button>
                       <button 
                         onClick={() => setView('home')}
                         className={`flex-1 font-black text-xs py-4 rounded-2xl uppercase tracking-widest transition-all shadow-lg ${isDark ? 'bg-slate-yellow text-charcoal shadow-slate-yellow/10' : 'bg-amber-500 text-white shadow-amber-500/10 hover:bg-amber-600'}`}
                       >
-                        Back to Overview
+                        {TRANSLATIONS[lang].backHomeBtn}
                       </button>
                     </div>
                   </motion.div>
                 ) : (
                   <form onSubmit={handleSubmit} className="space-y-6">
                     <div className="space-y-1">
-                      <h3 className={`font-black text-2xl uppercase tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>Secure Early Access</h3>
-                      <p className={`text-[10px] font-black uppercase tracking-wider ${secondaryText}`}>Enter your vehicle and dispatch details below</p>
+                      <h3 className={`font-black text-2xl uppercase tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>{TRANSLATIONS[lang].formTitle}</h3>
+                      <p className={`text-[10px] font-black uppercase tracking-wider ${secondaryText}`}>{TRANSLATIONS[lang].formSub}</p>
                     </div>
 
                     <div className="space-y-4">
                       <div>
-                        <label className={`text-[9px] font-black uppercase tracking-widest block mb-1.5 ${labelText}`}>Full Name *</label>
+                        <label className={`text-[9px] font-black uppercase tracking-widest block mb-1.5 ${labelText}`}>{TRANSLATIONS[lang].fullName}</label>
                         <input 
                           type="text" 
                           required
@@ -637,7 +852,7 @@ export default function LandingPage() {
                       </div>
 
                       <div>
-                        <label className={`text-[9px] font-black uppercase tracking-widest block mb-1.5 ${labelText}`}>Email Address *</label>
+                        <label className={`text-[9px] font-black uppercase tracking-widest block mb-1.5 ${labelText}`}>{TRANSLATIONS[lang].emailAddr}</label>
                         <input 
                           type="email" 
                           required
@@ -649,7 +864,7 @@ export default function LandingPage() {
                       </div>
 
                       <div>
-                        <label className={`text-[9px] font-black uppercase tracking-widest block mb-1.5 ${labelText}`}>Phone Number (WhatsApp Preferred) *</label>
+                        <label className={`text-[9px] font-black uppercase tracking-widest block mb-1.5 ${labelText}`}>{TRANSLATIONS[lang].phoneNum}</label>
                         <input 
                           type="tel" 
                           required
@@ -662,7 +877,7 @@ export default function LandingPage() {
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
-                          <label className={`text-[9px] font-black uppercase tracking-widest block mb-1.5 ${labelText}`}>Vehicle Class</label>
+                          <label className={`text-[9px] font-black uppercase tracking-widest block mb-1.5 ${labelText}`}>{TRANSLATIONS[lang].vehicleClass}</label>
                           <select 
                             value={formData.vehicleType}
                             onChange={(e) => setFormData(p => ({ ...p, vehicleType: e.target.value }))}
@@ -675,7 +890,7 @@ export default function LandingPage() {
                         </div>
 
                         <div>
-                          <label className={`text-[9px] font-black uppercase tracking-widest block mb-1.5 ${labelText}`}>Your Region</label>
+                          <label className={`text-[9px] font-black uppercase tracking-widest block mb-1.5 ${labelText}`}>{TRANSLATIONS[lang].yourRegion}</label>
                           <select 
                             value={formData.region}
                             onChange={(e) => setFormData(p => ({ ...p, region: e.target.value }))}
@@ -697,10 +912,10 @@ export default function LandingPage() {
                       {isSubmitting ? (
                         <span className="flex items-center gap-2">
                           <span className={`animate-spin border-2 border-t-transparent w-4 h-4 rounded-full ${isDark ? 'border-charcoal' : 'border-white'}`} />
-                          <span>Recording Lead...</span>
+                          <span>{TRANSLATIONS[lang].registering}</span>
                         </span>
                       ) : (
-                        <span>Register Securely</span>
+                        <span>{TRANSLATIONS[lang].registerBtn}</span>
                       )}
                     </button>
                   </form>
@@ -726,16 +941,16 @@ export default function LandingPage() {
                       className={`inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider transition-colors ${secondaryText} hover:text-amber-500`}
                     >
                       <ArrowLeft size={14} />
-                      <span>Home</span>
+                      <span>{lang === 'en' ? 'Home' : 'Nyumbani'}</span>
                     </button>
                     <span className="text-slate-500">/</span>
-                    <span className="text-xs font-black uppercase tracking-wider text-amber-500">Database Leads Console</span>
+                    <span className="text-xs font-black uppercase tracking-wider text-amber-500">{TRANSLATIONS[lang].dbConsole}</span>
                   </div>
                   <h2 className={`text-3xl font-black uppercase italic tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                    Registered Responses
+                    {TRANSLATIONS[lang].registeredResponses}
                   </h2>
                   <p className={`text-xs font-semibold uppercase tracking-wider ${secondaryText}`}>
-                    Real-time Turso Database synchronization engine
+                    {TRANSLATIONS[lang].realtimeTurso}
                   </p>
                 </div>
 
@@ -748,7 +963,7 @@ export default function LandingPage() {
                     }`}
                   >
                     <RefreshCw size={13} className={leadsLoading ? "animate-spin" : ""} />
-                    <span>{leadsLoading ? "Syncing..." : "Refresh Database"}</span>
+                    <span>{leadsLoading ? TRANSLATIONS[lang].syncing : TRANSLATIONS[lang].refreshDb}</span>
                   </button>
                   
                   <button 
@@ -758,7 +973,7 @@ export default function LandingPage() {
                     }`}
                   >
                     <Zap size={13} />
-                    <span>Register New Lead</span>
+                    <span>{TRANSLATIONS[lang].newLead}</span>
                   </button>
                 </div>
               </div>
@@ -772,7 +987,7 @@ export default function LandingPage() {
                   </span>
                   <input
                     type="text"
-                    placeholder="Search name, email, or phone..."
+                    placeholder={TRANSLATIONS[lang].searchPlaceholder}
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className={`w-full pl-10 pr-4 py-3 rounded-xl text-xs font-semibold focus:outline-none transition-all placeholder:text-slate-500 ${inputBg}`}
@@ -788,7 +1003,7 @@ export default function LandingPage() {
                       isDark ? 'bg-[#15171e] text-slate-300 border-white/10' : 'bg-slate-100 text-slate-800 border-slate-200'
                     }`}
                   >
-                    <option value="All">All Regions (Mikoa Yote)</option>
+                    <option value="All">{TRANSLATIONS[lang].allRegions}</option>
                     {POPULAR_REGIONS.map(reg => (
                       <option key={reg} value={reg}>{reg}</option>
                     ))}
@@ -804,7 +1019,7 @@ export default function LandingPage() {
                       isDark ? 'bg-[#15171e] text-slate-300 border-white/10' : 'bg-slate-100 text-slate-800 border-slate-200'
                     }`}
                   >
-                    <option value="All">All Vehicle Classes (Madaraja Yote)</option>
+                    <option value="All">{TRANSLATIONS[lang].allVehicles}</option>
                     {VEHICLE_TYPES.map(vt => (
                       <option key={vt.value} value={vt.value}>{vt.label}</option>
                     ))}
@@ -821,7 +1036,7 @@ export default function LandingPage() {
                       <div className={`absolute inset-0 border-4 border-t-transparent rounded-full animate-spin ${isDark ? 'border-slate-yellow' : 'border-amber-500'}`} />
                     </div>
                     <p className={`text-xs font-bold uppercase tracking-widest ${secondaryText}`}>
-                      Fetching certified leads from Turso...
+                      {lang === 'en' ? "Fetching certified leads from Turso..." : "Inapakua leads zilizothibitishwa kutoka Turso..."}
                     </p>
                   </div>
                 ) : leadsError ? (
@@ -830,14 +1045,14 @@ export default function LandingPage() {
                       <AlertCircle size={24} />
                     </div>
                     <div className="space-y-1">
-                      <p className="font-black text-sm uppercase">Connection Error</p>
+                      <p className="font-black text-sm uppercase">{lang === 'en' ? "Connection Error" : "Itilafu ya Muunganisho"}</p>
                       <p className="text-xs text-slate-500 max-w-md mx-auto">{leadsError}</p>
                     </div>
                     <button 
                       onClick={fetchLeads}
                       className="text-xs font-black uppercase tracking-wider text-amber-500 hover:underline"
                     >
-                      Try Again
+                      {lang === 'en' ? "Try Again" : "Jaribu Tena"}
                     </button>
                   </div>
                 ) : (
@@ -847,7 +1062,7 @@ export default function LandingPage() {
                       <div className="flex items-center gap-2">
                         <span className="w-2.5 h-2.5 bg-amber-500 rounded-full animate-pulse" />
                         <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-                          Database Entries
+                          {TRANSLATIONS[lang].dbEntries}
                         </span>
                       </div>
                       <span className={`text-[10px] font-mono font-black ${brandYellow}`}>
@@ -861,7 +1076,7 @@ export default function LandingPage() {
                             const matchesVehicle = filterVehicle === 'All' || lead.vehicleType === filterVehicle;
                             return matchesSearch && matchesRegion && matchesVehicle;
                           }).length
-                        } / {leads.length} Records Found
+                        } / {leads.length} {TRANSLATIONS[lang].recordsFound}
                       </span>
                     </div>
 
@@ -870,11 +1085,11 @@ export default function LandingPage() {
                       <table className="w-full text-left border-collapse">
                         <thead>
                           <tr className={`border-b text-[9px] font-black uppercase tracking-widest text-slate-500 ${borderTint} ${isDark ? 'bg-white/[0.02]' : 'bg-slate-100/50'}`}>
-                            <th className="py-4 px-6">Lead Name / Client</th>
-                            <th className="py-4 px-6">Contact details</th>
-                            <th className="py-4 px-6">Vehicle Type</th>
-                            <th className="py-4 px-6">Region</th>
-                            <th className="py-4 px-6">Registered At</th>
+                            <th className="py-4 px-6">{TRANSLATIONS[lang].leadNameCol}</th>
+                            <th className="py-4 px-6">{TRANSLATIONS[lang].contactCol}</th>
+                            <th className="py-4 px-6">{TRANSLATIONS[lang].vehicleTypeCol}</th>
+                            <th className="py-4 px-6">{TRANSLATIONS[lang].regionCol}</th>
+                            <th className="py-4 px-6">{TRANSLATIONS[lang].registeredAtCol}</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-white/5">
@@ -947,8 +1162,8 @@ export default function LandingPage() {
                               <td colSpan={5} className="py-16 text-center">
                                 <div className="text-slate-500 space-y-1">
                                   <Database size={20} className="mx-auto opacity-40 mb-2" />
-                                  <p className="font-black text-xs uppercase tracking-wider">No matching database records</p>
-                                  <p className="text-[10px] opacity-80">Try adjusting your filters or search keywords.</p>
+                                  <p className="font-black text-xs uppercase tracking-wider">{TRANSLATIONS[lang].noRecords}</p>
+                                  <p className="text-[10px] opacity-80">{TRANSLATIONS[lang].adjustFilters}</p>
                                 </div>
                               </td>
                             </tr>
