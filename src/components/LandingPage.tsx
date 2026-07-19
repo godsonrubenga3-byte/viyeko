@@ -264,7 +264,7 @@ const VEHICLE_TYPES = [
   { value: 'electric', label: 'Electric / Hybrid' }
 ];
 
-export default function LandingPage() {
+export default function LandingPage({ onLaunchApp }: { onLaunchApp?: () => void } = {}) {
   const [view, setView] = useState<'home' | 'register' | 'leads'>('home');
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     const stored = localStorage.getItem('viyeko-theme');
@@ -476,6 +476,17 @@ export default function LandingPage() {
               {isDark ? <Sun size={15} className="text-amber-400" /> : <Moon size={15} className="text-slate-700" />}
             </button>
 
+            {onLaunchApp && (
+              <button 
+                onClick={onLaunchApp}
+                className={`font-black text-[10px] uppercase tracking-wider py-2 px-4 rounded-xl transition-all duration-300 active:scale-95 flex items-center gap-1.5 ${isDark ? 'bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white border border-emerald-500/20 shadow-lg' : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg'}`}
+                id="header-launch-app-btn"
+              >
+                <Activity size={11} className="animate-pulse" />
+                <span>{lang === 'en' ? 'Launch Live App' : 'Fungua Programu ya Live'}</span>
+              </button>
+            )}
+
             {view === 'home' ? (
               <button 
                 onClick={() => setView('register')}
@@ -550,13 +561,27 @@ export default function LandingPage() {
                       <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
                     </button>
 
-                    <button 
-                      onClick={() => setView('register')}
-                      className={`w-full sm:w-auto border font-black text-xs uppercase tracking-widest px-8 py-4 rounded-2xl transition-all text-center flex items-center justify-center gap-2 active:scale-95 ${isDark ? 'bg-white/5 border-white/10 hover:border-slate-yellow/30 text-white hover:bg-white/10' : 'bg-slate-100 border-slate-200 text-slate-800 hover:bg-slate-200'}`}
-                    >
-                      <Activity size={14} className={`${brandYellow} animate-pulse`} />
-                      <span>{TRANSLATIONS[lang].joinBtn}</span>
-                    </button>
+                    {onLaunchApp ? (
+                      <button 
+                        onClick={onLaunchApp}
+                        className={`w-full sm:w-auto border font-black text-xs uppercase tracking-widest px-8 py-4 rounded-2xl transition-all text-center flex items-center justify-center gap-2 active:scale-95 ${
+                          isDark 
+                            ? 'bg-emerald-500/10 border-emerald-500/30 hover:border-emerald-500 text-emerald-400 hover:bg-emerald-500/20 shadow-lg shadow-emerald-500/5' 
+                            : 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100 shadow-lg shadow-emerald-500/5'
+                        }`}
+                      >
+                        <Activity size={14} className="animate-pulse text-emerald-500" />
+                        <span>{lang === 'en' ? 'Launch Live App' : 'Fungua Programu ya Live'}</span>
+                      </button>
+                    ) : (
+                      <button 
+                        onClick={() => setView('register')}
+                        className={`w-full sm:w-auto border font-black text-xs uppercase tracking-widest px-8 py-4 rounded-2xl transition-all text-center flex items-center justify-center gap-2 active:scale-95 ${isDark ? 'bg-white/5 border-white/10 hover:border-slate-yellow/30 text-white hover:bg-white/10' : 'bg-slate-100 border-slate-200 text-slate-800 hover:bg-slate-200'}`}
+                      >
+                        <Activity size={14} className={`${brandYellow} animate-pulse`} />
+                        <span>{TRANSLATIONS[lang].joinBtn}</span>
+                      </button>
+                    )}
                   </div>
 
                   <div className="flex flex-wrap items-center justify-center md:justify-start gap-6 pt-4 text-xs font-bold text-slate-500 uppercase tracking-widest">
@@ -754,13 +779,26 @@ export default function LandingPage() {
                   <p className={`max-w-xl mx-auto text-sm font-medium ${secondaryText}`}>
                     {TRANSLATIONS[lang].ctaDesc}
                   </p>
-                  <div>
+                  <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
                     <button 
                       onClick={() => setView('register')}
                       className={`font-black text-xs uppercase tracking-widest px-10 py-4.5 rounded-2xl transition-all hover:scale-[1.02] shadow-lg ${isDark ? 'bg-slate-yellow text-charcoal shadow-slate-yellow/10 hover:bg-slate-yellow/90' : 'bg-amber-500 text-white shadow-amber-500/10 hover:bg-amber-600'}`}
                     >
                       {TRANSLATIONS[lang].ctaBtn}
                     </button>
+                    {onLaunchApp && (
+                      <button 
+                        onClick={onLaunchApp}
+                        className={`w-full sm:w-auto border font-black text-xs uppercase tracking-widest px-10 py-4.5 rounded-2xl transition-all hover:scale-[1.02] active:scale-95 text-center flex items-center justify-center gap-2 ${
+                          isDark 
+                            ? 'bg-emerald-500/10 border-emerald-500/30 hover:border-emerald-500 text-emerald-400 hover:bg-emerald-500/20 shadow-lg shadow-emerald-500/5' 
+                            : 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100 shadow-lg shadow-emerald-500/5'
+                        }`}
+                      >
+                        <Activity size={14} className="animate-pulse text-emerald-500" />
+                        <span>{lang === 'en' ? 'Launch Live App' : 'Fungua Programu ya Live'}</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               </section>

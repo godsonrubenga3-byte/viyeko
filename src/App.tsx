@@ -1808,7 +1808,7 @@ export default function App() {
             });
         },
         (error) => {
-          console.error("Auto geolocate on mount failed:", error);
+          console.warn("Auto geolocate on mount failed (expected in sandboxed environments):", error);
           // Standard Tanzania default
           setLocation({ address: 'Dar es Salaam, Tanzania' });
         }
@@ -2465,10 +2465,10 @@ export default function App() {
     loc.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  if (true) {
+  if (route === 'landing') {
     return (
       <>
-        <LandingPage />
+        <LandingPage onLaunchApp={() => navigateToRoute('prototype')} />
         <Toaster position="top-center" richColors />
       </>
     );
